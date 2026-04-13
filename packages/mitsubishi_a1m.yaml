@@ -1,0 +1,519 @@
+# Modbus integration for Mitsubishi heat pump via the A1M Modbus Serial gateway
+# Based on helgeklein package, adapted for serial (A1M) connection.
+# Notes:
+#   - Sensor names are not translatable. We're using German names but provide the English strings, too.
+#   - We use unique_ids for each sensor so that the names can be changed in the UI.
+#   - Enums are exposed as strings via template sensors for better readability.
+#   - Entity-IDs: HA generates IDs from the name field. Depending on HA version,
+#     umlauts may be converted differently (e.g. "Wärmepumpe" → warmepumpe or waermepumpe).
+#     Check your actual entity IDs in Developer Tools → States.
+
+modbus:
+  - name: mitsubishi-a1m
+    type: serial
+    port: /dev/ttyUSB0
+    baudrate: 9600
+    bytesize: 8
+    parity: N
+    stopbits: 1
+    method: rtu
+    timeout: 2
+
+    binary_sensors:
+
+      # EN: Water pump 1
+      # DE: Wasserpumpe 1
+      - name: "Mitsubishi WP: Wasserpumpe 1"
+        address: 21
+        scan_interval: 60
+        input_type: discrete_input
+        device_class: running
+        unique_id: mitsubishi_wp_wasserpumpe_1
+
+      # EN: Water pump 2
+      # DE: Wasserpumpe 2
+      - name: "Mitsubishi WP: Wasserpumpe 2"
+        address: 22
+        scan_interval: 60
+        input_type: discrete_input
+        device_class: running
+        unique_id: mitsubishi_wp_wasserpumpe_2
+
+    sensors:
+
+      # EN: Operating mode
+      # DE: Betriebsart
+      - name: "Mitsubishi WP: Betriebsart (raw)"
+        address: 26
+        data_type: uint16
+        scan_interval: 60
+        input_type: holding
+        unique_id: mitsubishi_wp_betriebsart_raw
+
+      # EN: Operating mode (DHW)
+      # DE: Betriebsart (Warmwasser)
+      - name: "Mitsubishi WP: Betriebsart (Warmwasser) (raw)"
+        address: 27
+        data_type: uint16
+        scan_interval: 60
+        input_type: holding
+        unique_id: mitsubishi_wp_betriebsart_warmwasser_raw
+
+      # EN: A/C mode zone 1
+      # DE: A/C Modus Heizkreis 1
+      - name: "Mitsubishi WP: A/C Modus Heizkreis 1 (raw)"
+        address: 28
+        data_type: uint16
+        scan_interval: 60
+        input_type: holding
+        unique_id: mitsubishi_wp_a_c_modus_heizkreis_1_raw
+
+      # EN: Set tank water temperature
+      # DE: Solltemperatur Wasserspeicher
+      - name: "Mitsubishi WP: Solltemperatur Wasserspeicher (TWW)"
+        address: 31
+        data_type: uint16
+        scale: 0.01
+        precision: 1
+        scan_interval: 60
+        input_type: holding
+        unit_of_measurement: "°C"
+        device_class: temperature
+        state_class: measurement
+        unique_id: mitsubishi_wp_solltemperatur_wasserspeicher_tww
+
+      # EN: Heating/Cooling thermostat target temperature zone 1
+      # DE: Heizen/Kühlen Thermostat Solltemperatur Heizkreis 1
+      - name: "Mitsubishi WP: Heizen/Kühlen Thermostat Solltemperatur Heizkreis 1"
+        address: 33
+        data_type: uint16
+        scale: 0.01
+        precision: 1
+        scan_interval: 60
+        input_type: holding
+        unit_of_measurement: "°C"
+        device_class: temperature
+        state_class: measurement
+        unique_id: mitsubishi_wp_heizen_kuhlen_thermostat_solltemperatur_heizkreis_1
+
+      # EN: Thermostat target temperature zone 1
+      # DE: Temperaturregler Solltemperatur Heizkreis 1
+      - name: "Mitsubishi WP: Temperaturregler Solltemperatur Heizkreis 1"
+        address: 55
+        data_type: uint16
+        scale: 0.01
+        precision: 1
+        scan_interval: 60
+        input_type: holding
+        unit_of_measurement: "°C"
+        device_class: temperature
+        state_class: measurement
+        unique_id: mitsubishi_wp_temperaturregler_solltemperatur_heizkreis_1
+
+      # EN: Heating/Cooling control type
+      # DE: Umschaltung Heizen/Kühlen
+      - name: "Mitsubishi WP: Umschaltung Heizen/Kühlen (raw)"
+        address: 58
+        data_type: uint16
+        scan_interval: 60
+        input_type: holding
+        unique_id: mitsubishi_wp_umschaltung_heizen_kuhlen_raw
+
+      # EN: Defrost
+      # DE: Abtaubetrieb
+      - name: "Mitsubishi WP: Abtaubetrieb (raw)"
+        address: 67
+        data_type: uint16
+        scan_interval: 60
+        input_type: holding
+        unique_id: mitsubishi_wp_abtaubetrieb_raw
+
+      # EN: Heat pump frequency
+      # DE: Wärmepumpe Frequenz
+      - name: "Mitsubishi WP: Wärmepumpe Frequenz"
+        address: 73
+        data_type: uint16
+        scan_interval: 1
+        input_type: holding
+        unit_of_measurement: "Hz"
+        device_class: frequency
+        state_class: measurement
+        unique_id: mitsubishi_wp_waermepumpe_frequenz
+
+      # EN: Heat source status
+      # DE: Status Heizquelle
+      - name: "Mitsubishi WP: Status Heizquelle (raw)"
+        address: 80
+        data_type: uint16
+        scan_interval: 60
+        input_type: holding
+        unique_id: mitsubishi_wp_status_heizquelle_raw
+
+      # EN: Outdoor temperature
+      # DE: Außentemperatur
+      - name: "Mitsubishi WP: Außentemperatur"
+        address: 99
+        data_type: int16
+        scale: 0.1
+        precision: 1
+        scan_interval: 60
+        input_type: holding
+        unit_of_measurement: "°C"
+        device_class: temperature
+        state_class: measurement
+        unique_id: mitsubishi_wp_aussentemperatur
+
+      # EN: Flow temperature
+      # DE: Vorlauftemperatur
+      - name: "Mitsubishi WP: Vorlauftemperatur"
+        address: 102
+        data_type: uint16
+        scale: 0.01
+        precision: 1
+        scan_interval: 60
+        input_type: holding
+        unit_of_measurement: "°C"
+        device_class: temperature
+        state_class: measurement
+        unique_id: mitsubishi_wp_vorlauftemperatur
+
+      # EN: Return temperature
+      # DE: Rücklauftemperatur
+      - name: "Mitsubishi WP: Rücklauftemperatur"
+        address: 104
+        data_type: uint16
+        scale: 0.01
+        precision: 1
+        scan_interval: 60
+        input_type: holding
+        unit_of_measurement: "°C"
+        device_class: temperature
+        state_class: measurement
+        unique_id: mitsubishi_wp_ruecklauftemperatur
+
+      # EN: Tank water temperature
+      # DE: Speichertemperatur
+      - name: "Mitsubishi WP: Isttemperatur Wasserspeicher (TWW)"
+        address: 106
+        data_type: uint16
+        scale: 0.01
+        precision: 1
+        scan_interval: 1
+        input_type: holding
+        unit_of_measurement: "°C"
+        device_class: temperature
+        state_class: measurement
+        unique_id: mitsubishi_wp_isttemperatur_wasserspeicher_tww
+
+      # EN: Flow temperature zone 1
+      # DE: Vorlauftemperatur Heizkreis 1
+      - name: "Mitsubishi WP: Vorlauftemperatur Heizkreis 1"
+        address: 108
+        data_type: uint16
+        scale: 0.01
+        precision: 1
+        scan_interval: 60
+        input_type: holding
+        unit_of_measurement: "°C"
+        device_class: temperature
+        state_class: measurement
+        unique_id: mitsubishi_wp_vorlauftemperatur_heizkreis_1
+
+      # EN: Return temperature zone 1
+      # DE: Rücklauftemperatur Heizkreis 1
+      - name: "Mitsubishi WP: Rücklauftemperatur Heizkreis 1"
+        address: 110
+        data_type: uint16
+        scale: 0.01
+        precision: 1
+        scan_interval: 60
+        input_type: holding
+        unit_of_measurement: "°C"
+        device_class: temperature
+        state_class: measurement
+        unique_id: mitsubishi_wp_ruecklauftemperatur_heizkreis_1
+
+      # EN: Last measured heating energy produced kWh part
+      # DE: Zuletzt gemessene erzeugte Heizenergie kWh-Anteil
+      - name: "Mitsubishi WP: Zuletzt gemessene erzeugte Heizenergie kWh-Anteil"
+        address: 292
+        data_type: uint16
+        scan_interval: 60
+        input_type: holding
+        unit_of_measurement: "kWh"
+        device_class: energy
+        state_class: total
+        unique_id: mitsubishi_wp_zuletzt_gemessene_erzeugte_heizenergie_kwh_anteil
+
+      # EN: Last measured heating energy produced Wh part
+      # DE: Zuletzt gemessene erzeugte Heizenergie Wh-Anteil
+      - name: "Mitsubishi WP: Zuletzt gemessene erzeugte Heizenergie Wh-Anteil"
+        address: 293
+        data_type: uint16
+        scale: 10
+        scan_interval: 60
+        input_type: holding
+        unit_of_measurement: "Wh"
+        device_class: energy
+        state_class: total
+        unique_id: mitsubishi_wp_zuletzt_gemessene_erzeugte_heizenergie_wh_anteil
+
+      # EN: Last measured cooling energy produced kWh part
+      # DE: Zuletzt gemessene erzeugte Kühlenergie kWh-Anteil
+      - name: "Mitsubishi WP: Zuletzt gemessene erzeugte Kühlenergie kWh-Anteil"
+        address: 294
+        data_type: uint16
+        scan_interval: 60
+        input_type: holding
+        unit_of_measurement: "kWh"
+        device_class: energy
+        state_class: total
+        unique_id: mitsubishi_wp_zuletzt_gemessene_erzeugte_kuhlenergie_kwh_anteil
+
+      # EN: Last measured cooling energy produced Wh part
+      # DE: Zuletzt gemessene erzeugte Kühlenergie Wh-Anteil
+      - name: "Mitsubishi WP: Zuletzt gemessene erzeugte Kühlenergie Wh-Anteil"
+        address: 295
+        data_type: uint16
+        scale: 10
+        scan_interval: 60
+        input_type: holding
+        unit_of_measurement: "Wh"
+        device_class: energy
+        state_class: total
+        unique_id: mitsubishi_wp_zuletzt_gemessene_erzeugte_kuhlenergie_wh_anteil
+
+      # EN: Last measured DHW energy produced kWh part
+      # DE: Zuletzt gemessene erzeugte Warmwasserenergie kWh-Anteil
+      - name: "Mitsubishi WP: Zuletzt gemessene erzeugte Warmwasserenergie kWh-Anteil"
+        address: 296
+        data_type: uint16
+        scan_interval: 60
+        input_type: holding
+        unit_of_measurement: "kWh"
+        device_class: energy
+        state_class: total
+        unique_id: mitsubishi_wp_zuletzt_gemessene_erzeugte_warmwasserenergie_kwh_anteil
+
+      # EN: Last measured DHW energy produced Wh part
+      # DE: Zuletzt gemessene erzeugte Warmwasserenergie Wh-Anteil
+      - name: "Mitsubishi WP: Zuletzt gemessene erzeugte Warmwasserenergie Wh-Anteil"
+        address: 297
+        data_type: uint16
+        scale: 10
+        scan_interval: 60
+        input_type: holding
+        unit_of_measurement: "Wh"
+        device_class: energy
+        state_class: total
+        unique_id: mitsubishi_wp_zuletzt_gemessene_erzeugte_warmwasserenergie_wh_anteil
+
+      # EN: Flow rate
+      # DE: Durchflussmenge
+      - name: "Mitsubishi WP: Durchflussmenge"
+        address: 299
+        data_type: uint16
+        scan_interval: 60
+        input_type: holding
+        unit_of_measurement: "L/min"
+        device_class: volume_flow_rate
+        state_class: measurement
+        unique_id: mitsubishi_wp_durchflussmenge
+
+      # EN: Consumed power
+      # DE: Verbrauchte Leistung
+      - name: "Mitsubishi WP: Verbrauchte Leistung"
+        address: 379
+        data_type: uint16
+        scan_interval: 60
+        input_type: holding
+        unit_of_measurement: "kW"
+        device_class: power
+        state_class: measurement
+        unique_id: mitsubishi_wp_verbrauchte_leistung
+
+      # EN: Produced power
+      # DE: Erzeugte Leistung
+      - name: "Mitsubishi WP: Erzeugte Leistung"
+        address: 380
+        data_type: uint16
+        scan_interval: 60
+        input_type: holding
+        unit_of_measurement: "kW"
+        device_class: power
+        state_class: measurement
+        unique_id: mitsubishi_wp_erzeugte_leistung
+
+      # EN: Mix tank water temp
+      # DE: Temperatur Mischwasserspeicher
+      - name: "Mitsubishi WP: Isttemperatur Pufferspeicher (Heizen/Kühlen)"
+        address: 386
+        data_type: uint16
+        scale: 0.01
+        precision: 1
+        scan_interval: 60
+        input_type: holding
+        unit_of_measurement: "°C"
+        device_class: temperature
+        state_class: measurement
+        unique_id: mitsubishi_wp_temperatur_mischwasserspeicher
+
+input_select:
+  mitsubishi_wp_translations_language:
+    name: "Mitsubishi WP: Translations Language"
+    options:
+      - en
+      - de
+    initial: de
+
+template:
+
+  - sensor:
+
+      # Translation table for enums
+      - name: "Mitsubishi WP: Translations"
+        state: "ready"
+        attributes:
+          ac_mode_en: >-
+            {{ {0: 'Heating Room Temp', 1: 'Heating Flow Temp', 2: 'Heating Heat Curve', 3: 'Cooling Room Temp', 4: 'Cooling Flow Temp', 5: 'Floor Dryup'} }}
+          ac_mode_de: >-
+            {{ {0: 'Heizen Raumtemperatur', 1: 'Heizen Vorlauftemperatur', 2: 'Heizen Heizkurve', 3: 'Kühlen Raumtemperatur', 4: 'Kühlen Vorlauftemperatur', 5: 'Estrichtrocknung'} }}
+          defrost_en: >-
+            {{ {0: 'Normal', 1: 'Standby', 2: 'Defrost', 3: 'Waiting restart'} }}
+          defrost_de: >-
+            {{ {0: 'Normal', 1: 'Standby', 2: 'Abtauung', 3: 'Wiederanlauf'} }}
+          dhw_mode_en: >-
+            {{ {0: 'Normal', 1: 'Eco'} }}
+          dhw_mode_de: >-
+            {{ {0: 'Normal', 1: 'Eco'} }}
+          heat_source_status_en: >-
+            {{ {0: 'Heatpump', 1: 'IH', 2: 'BH', 3: 'IH + BH', 4: 'Boiler'} }}
+          heat_source_status_de: >-
+            {{ {0: 'Wärmepumpe', 1: 'Elektrische Einschraubheizung', 2: 'Elektroheizstab', 3: 'Elektrische Einschraubheizung + Elektroheizstab', 4: 'Warmwasserspeicher'} }}
+          heating_cooling_mode_en: >-
+            {{ {0: 'Heating', 1: 'Cooling'} }}
+          heating_cooling_mode_de: >-
+            {{ {0: 'Heizen', 1: 'Kühlen'} }}
+          operating_mode_en: >-
+            {{ {0: 'Stop', 1: 'Hot Water', 2: 'Heating', 3: 'Cooling', 4: 'No voltage contact input (hot water storage)', 5: 'Freeze Stat', 6: 'Legionella', 7: 'Heating-Eco', 8: 'Mode 1', 9: 'Mode 2', 10: 'Mode 3', 11: 'No voltage contact input (heating up)'} }}
+          operating_mode_de: >-
+            {{ {0: 'Stopp', 1: 'Warmwasser', 2: 'Heizen', 3: 'Kühlen', 4: 'Potentialfreier Eingangskontakt (Warmwasserspeicher)', 5: 'Frostschutz', 6: 'Legionellenschutz', 7: 'Heizen-Eco', 8: 'Betriebsart 1', 9: 'Betriebsart 2', 10: 'Betriebsart 3', 11: 'Potentialfreier Eingangskontakt (Aufheizen)'} }}
+
+      # Translated enum sensors
+
+      - name: "Mitsubishi WP: Betriebsart"
+        unique_id: mitsubishi_wp_betriebsart
+        state: >-
+          {% set lang = states('input_select.mitsubishi_wp_translations_language') %}
+          {% set trans = state_attr('sensor.mitsubishi_wp_translations', 'operating_mode_' ~ lang) %}
+          {% set v = states('sensor.mitsubishi_wp_betriebsart_raw') %}
+          {{ trans.get(v | int(-1), 'Unknown (' ~ v ~ ')') if v not in ['unknown', 'unavailable', 'none'] else v }}
+        attributes:
+          raw_value: "{{ states('sensor.mitsubishi_wp_betriebsart_raw') }}"
+
+      - name: "Mitsubishi WP: Betriebsart (Warmwasser)"
+        unique_id: mitsubishi_wp_betriebsart_warmwasser
+        state: >-
+          {% set lang = states('input_select.mitsubishi_wp_translations_language') %}
+          {% set trans = state_attr('sensor.mitsubishi_wp_translations', 'dhw_mode_' ~ lang) %}
+          {% set v = states('sensor.mitsubishi_wp_betriebsart_warmwasser_raw') %}
+          {{ trans.get(v | int(-1), 'Unknown (' ~ v ~ ')') if v not in ['unknown', 'unavailable', 'none'] else v }}
+        attributes:
+          raw_value: "{{ states('sensor.mitsubishi_wp_betriebsart_warmwasser_raw') }}"
+
+      - name: "Mitsubishi WP: A/C Modus Heizkreis 1"
+        unique_id: mitsubishi_wp_a_c_modus_heizkreis_1
+        state: >-
+          {% set lang = states('input_select.mitsubishi_wp_translations_language') %}
+          {% set trans = state_attr('sensor.mitsubishi_wp_translations', 'ac_mode_' ~ lang) %}
+          {% set v = states('sensor.mitsubishi_wp_a_c_modus_heizkreis_1_raw') %}
+          {{ trans.get(v | int(-1), 'Unknown (' ~ v ~ ')') if v not in ['unknown', 'unavailable', 'none'] else v }}
+        attributes:
+          raw_value: "{{ states('sensor.mitsubishi_wp_a_c_modus_heizkreis_1_raw') }}"
+
+      - name: "Mitsubishi WP: Umschaltung Heizen/Kühlen"
+        unique_id: mitsubishi_wp_umschaltung_heizen_kuhlen
+        state: >-
+          {% set lang = states('input_select.mitsubishi_wp_translations_language') %}
+          {% set trans = state_attr('sensor.mitsubishi_wp_translations', 'heating_cooling_mode_' ~ lang) %}
+          {% set v = states('sensor.mitsubishi_wp_umschaltung_heizen_kuhlen_raw') %}
+          {{ trans.get(v | int(-1), 'Unknown (' ~ v ~ ')') if v not in ['unknown', 'unavailable', 'none'] else v }}
+        attributes:
+          raw_value: "{{ states('sensor.mitsubishi_wp_umschaltung_heizen_kuhlen_raw') }}"
+
+      - name: "Mitsubishi WP: Abtaubetrieb"
+        unique_id: mitsubishi_wp_abtaubetrieb
+        state: >-
+          {% set lang = states('input_select.mitsubishi_wp_translations_language') %}
+          {% set trans = state_attr('sensor.mitsubishi_wp_translations', 'defrost_' ~ lang) %}
+          {% set v = states('sensor.mitsubishi_wp_abtaubetrieb_raw') %}
+          {{ trans.get(v | int(-1), 'Unknown (' ~ v ~ ')') if v not in ['unknown', 'unavailable', 'none'] else v }}
+        attributes:
+          raw_value: "{{ states('sensor.mitsubishi_wp_abtaubetrieb_raw') }}"
+
+      - name: "Mitsubishi WP: Status Heizquelle"
+        unique_id: mitsubishi_wp_status_heizquelle
+        state: >-
+          {% set lang = states('input_select.mitsubishi_wp_translations_language') %}
+          {% set trans = state_attr('sensor.mitsubishi_wp_translations', 'heat_source_status_' ~ lang) %}
+          {% set v = states('sensor.mitsubishi_wp_status_heizquelle_raw') %}
+          {{ trans.get(v | int(-1), 'Unknown (' ~ v ~ ')') if v not in ['unknown', 'unavailable', 'none'] else v }}
+        attributes:
+          raw_value: "{{ states('sensor.mitsubishi_wp_status_heizquelle_raw') }}"
+
+      # Derived values
+
+      - name: "Mitsubishi WP: Zuletzt gemessene erzeugte Heizenergie"
+        unique_id: mitsubishi_wp_zuletzt_gemessene_erzeugte_heizenergie
+        unit_of_measurement: "kWh"
+        device_class: energy
+        state_class: total
+        availability: >-
+          {{ states('sensor.mitsubishi_wp_zuletzt_gemessene_erzeugte_heizenergie_kwh_anteil') not in ['unknown', 'unavailable', 'none']
+             and states('sensor.mitsubishi_wp_zuletzt_gemessene_erzeugte_heizenergie_wh_anteil') not in ['unknown', 'unavailable', 'none'] }}
+        state: >-
+          {% set kwh = states('sensor.mitsubishi_wp_zuletzt_gemessene_erzeugte_heizenergie_kwh_anteil') | float(0) %}
+          {% set wh = states('sensor.mitsubishi_wp_zuletzt_gemessene_erzeugte_heizenergie_wh_anteil') | float(0) %}
+          {{ (kwh + (wh / 1000)) | round(2) }}
+
+      - name: "Mitsubishi WP: Zuletzt gemessene erzeugte Kühlenergie"
+        unique_id: mitsubishi_wp_zuletzt_gemessene_erzeugte_kuhlenergie
+        unit_of_measurement: "kWh"
+        device_class: energy
+        state_class: total
+        availability: >-
+          {{ states('sensor.mitsubishi_wp_zuletzt_gemessene_erzeugte_kuhlenergie_kwh_anteil') not in ['unknown', 'unavailable', 'none']
+             and states('sensor.mitsubishi_wp_zuletzt_gemessene_erzeugte_kuhlenergie_wh_anteil') not in ['unknown', 'unavailable', 'none'] }}
+        state: >-
+          {% set kwh = states('sensor.mitsubishi_wp_zuletzt_gemessene_erzeugte_kuhlenergie_kwh_anteil') | float(0) %}
+          {% set wh = states('sensor.mitsubishi_wp_zuletzt_gemessene_erzeugte_kuhlenergie_wh_anteil') | float(0) %}
+          {{ (kwh + (wh / 1000)) | round(2) }}
+
+      - name: "Mitsubishi WP: Zuletzt gemessene erzeugte Warmwasserenergie"
+        unique_id: mitsubishi_wp_zuletzt_gemessene_erzeugte_warmwasserenergie
+        unit_of_measurement: "kWh"
+        device_class: energy
+        state_class: total
+        availability: >-
+          {{ states('sensor.mitsubishi_wp_zuletzt_gemessene_erzeugte_warmwasserenergie_kwh_anteil') not in ['unknown', 'unavailable', 'none']
+             and states('sensor.mitsubishi_wp_zuletzt_gemessene_erzeugte_warmwasserenergie_wh_anteil') not in ['unknown', 'unavailable', 'none'] }}
+        state: >-
+          {% set kwh = states('sensor.mitsubishi_wp_zuletzt_gemessene_erzeugte_warmwasserenergie_kwh_anteil') | float(0) %}
+          {% set wh = states('sensor.mitsubishi_wp_zuletzt_gemessene_erzeugte_warmwasserenergie_wh_anteil') | float(0) %}
+          {{ (kwh + (wh / 1000)) | round(2) }}
+
+      # EN: COP (instantaneous) - from internal WP power registers
+      # DE: Leistungszahl (momentan) - aus internen WP-Leistungsregistern
+      - name: "Mitsubishi WP: COP"
+        unique_id: mitsubishi_wp_cop
+        state_class: measurement
+        availability: >-
+          {% set p_in = states('sensor.mitsubishi_wp_verbrauchte_leistung') %}
+          {% set p_out = states('sensor.mitsubishi_wp_erzeugte_leistung') %}
+          {{ p_in not in ['unknown', 'unavailable', 'none']
+             and p_out not in ['unknown', 'unavailable', 'none']
+             and (p_in | float(0)) > 0 }}
+        state: >-
+          {% set p_in = states('sensor.mitsubishi_wp_verbrauchte_leistung') | float(0) %}
+          {% set p_out = states('sensor.mitsubishi_wp_erzeugte_leistung') | float(0) %}
+          {{ (p_out / p_in) | round(2) }}

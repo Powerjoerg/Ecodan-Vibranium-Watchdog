@@ -1,0 +1,182 @@
+# ============================================================
+# Template-Sensoren für Mitsubishi Ecodan PV-Boost
+#
+# Diesen Block in die configuration.yaml einfügen.
+# ACHTUNG: Die Shelly Entity-IDs müssen an dein Gerät
+# angepasst werden (MAC-Adresse ersetzen)!
+# ============================================================
+
+template:
+  - sensor:
+      # ─── Shelly Pro 3EM: WP Verbrauch ──────────────────────
+      # Phase A = Außeneinheit (3-phasig, 1 Phase gemessen × 3)
+      - name: "WP Aussen Gesamt"
+        unit_of_measurement: "W"
+        device_class: power
+        state_class: measurement
+        state: >
+          {{ states('sensor.shellypro3em_XXXXXXXXXXXX_phase_a_leistung') | float(0) * 3 }}
+
+      # Phase B = Heizstab (3-phasig, 1 Phase gemessen × 3)
+      - name: "WP Heizstab Gesamt"
+        unit_of_measurement: "W"
+        device_class: power
+        state_class: measurement
+        state: >
+          {{ states('sensor.shellypro3em_XXXXXXXXXXXX_phase_b_leistung') | float(0) * 3 }}
+
+      # Phase C = Innenmodul (1-phasig, direkt)
+      - name: "WP Innen Gesamt"
+        unit_of_measurement: "W"
+        device_class: power
+        state_class: measurement
+        state: >
+          {{ states('sensor.shellypro3em_XXXXXXXXXXXX_phase_c_leistung') | float(0) }}
+
+      # Gesamtverbrauch WP (Summe aller drei)
+      - name: "WP Gesamtverbrauch"
+        unit_of_measurement: "W"
+        device_class: power
+        state_class: measurement
+        state: >
+          {{ (states('sensor.shellypro3em_XXXXXXXXXXXX_phase_a_leistung') | float(0) * 3)
+           + (states('sensor.shellypro3em_XXXXXXXXXXXX_phase_b_leistung') | float(0) * 3)
+           + (states('sensor.shellypro3em_XXXXXXXXXXXX_phase_c_leistung') | float(0)) }}
+
+      # ─── Wärmeleistung aus Modbus-Daten ────────────────────
+      # Hinweis: Verwendet sensor.mitsubishi_wp_vorlauftemperatur
+      # (direkt am WP-Ausgang), nicht den Heizkreis-Sensor.
+      # Das ist physikalisch korrekt für die COP-Berechnung,
+      # da der COP am WP-Ausgang gemessen werden soll.
+      - name: "WP Waermeleistung"
+        unit_of_measurement: "W"
+        device_class: power
+        state_class: measurement
+        state: >
+          {% set freq = states('sensor.mitsubishi_wp_warmepumpe_frequenz') | float(0) %}
+          {% set flow = states('sensor.mitsubishi_wp_durchflussmenge') | float(0) %}
+          {% set vl = states('sensor.mitsubishi_wp_vorlauftemperatur') | float(0) %}
+          {% set rl = states('sensor.mitsubishi_wp_rucklauftemperatur') | float(0) %}
+          {% if freq > 5 and flow > 0 and (vl - rl) > 0.5 %}
+            {{ (flow * (vl - rl) * 4186 / 60) | round(0) }}
+          {% else %}
+            0
+          {% endif %}
+
+      # ─── COP Momentan (behält letzten Wert) ────────────────
+      # Berechnet aus Shelly 3EM (elektrisch) und Delta-T
+      # (thermisch). Dies ist der externe COP, unabhängig von
+      # den internen WP-Leistungssensoren.
+      # Hinweis: Im Modbus-Package gibt es zusätzlich einen
+      # sensor.mitsubishi_wp_cop aus WP-internen Daten.
+      # Der hier berechnete COP über Shelly 3EM ist in der
+      # Regel genauer.
+      - name: "WP COP"
+        unit_of_measurement: ""
+        state: >
+          {% set flow = states('sensor.mitsubishi_wp_durchflussmenge') | float(0) %}
+          {% set vl = states('sensor.mitsubishi_wp_vorlauftemperatur') | float(0) %}
+          {% set rl = states('sensor.mitsubishi_wp_rucklauftemperatur') | float(0) %}
+          {% set el = states('sensor.wp_gesamtverbrauch') | float(0) %}
+          {% if el > 200 and flow > 0 and (vl - rl) > 0.5 %}
+            {{ ((flow * (vl - rl) * 4186 / 60) / el) | round(2) }}
+          {% else %}
+            {{ this.state | default(0) }}
+          {% endif %}
+
+      # ─── COP Heute (Tageswert) ─────────────────────────────
+      - name: "WP COP Heute"
+        unit_of_measurement: ""
+        state: >
+          {% set waerme = states('sensor.wp_waerme_heute') | float(0) %}
+          {% set strom = states('sensor.wp_verbrauch_heute') | float(0) %}
+          {% if strom > 0.1 and waerme > 0 %}
+            {{ (waerme / strom) | round(2) }}
+          {% else %}
+            {{ this.state | default(0) }}
+          {% endif %}
+
+      # ─── Durchschnittliche Laufzeit pro Zyklus ─────────────
+      - name: "WP Laufzeit pro Zyklus"
+        unit_of_measurement: "min"
+        state: >
+          {% set starts = states('counter.wp_starts_heute') | int(0) %}
+          {% set laufzeit_h = states('sensor.wp_laufzeit_heute') | float(0) %}
+          {% if starts > 0 %}
+            {{ (laufzeit_h * 60 / starts) | round(0) }}
+          {% else %}
+            0
+          {% endif %}
+
+      # ─── Taktungsbewertung ─────────────────────────────────
+      - name: "WP Taktungsbewertung"
+        state: >
+          {% set starts = states('counter.wp_starts_heute') | int(0) %}
+          {% set laufzeit_h = states('sensor.wp_laufzeit_heute') | float(0) %}
+          {% set laeuft = states('binary_sensor.wp_laeuft') %}
+          {% set avg_min = (laufzeit_h * 60 / starts) | round(0) if starts > 0 else 0 %}
+          {% if starts == 0 and laeuft == 'on' %}
+            🟢 Dauerlauf
+          {% elif starts == 0 %}
+            {{ this.state | default('Kein Betrieb') }}
+          {% elif starts <= 2 %}
+            🟢 Optimal
+          {% elif starts <= 4 and avg_min >= 30 %}
+            🟢 Gut
+          {% elif starts <= 4 %}
+            🟡 Normal
+          {% elif starts <= 8 and avg_min >= 15 %}
+            🟡 Normal
+          {% elif starts <= 8 %}
+            🟠 Beobachten
+          {% else %}
+            🔴 Kritisch
+          {% endif %}
+
+      # ─── Heizbedarf: mindestens ein Raum unter Soll ────────
+      - name: "WP Heizbedarf"
+        state: >
+          {% set raeume = [
+            'climate.st1820_80b54e38809c',
+            'climate.st1820_b08184f2dbc8',
+            'climate.st1820_b08184f4860c',
+            'climate.st1820_b08184f48e64',
+            'climate.st1820_b08184f5c164',
+            'climate.st1820_b08184f67248',
+            'climate.t_kuche_eg',
+            'climate.thermostat_buro'
+          ] %}
+          {% set ns = namespace(bedarf=false) %}
+          {% for raum in raeume %}
+            {% set ist = state_attr(raum, 'current_temperature') | float(99) %}
+            {% set soll = state_attr(raum, 'temperature') | float(0) %}
+            {% if ist < soll %}
+              {% set ns.bedarf = true %}
+            {% endif %}
+          {% endfor %}
+          {{ ns.bedarf }}
+
+      # ─── Nachtabsenkung aktiv Anzeige ──────────────────────
+      - name: "WP Nachtabsenkung"
+        state: >
+          {% if now().hour >= 21 or now().hour < 3 %}
+            Aktiv (Soll -3°C)
+          {% else %}
+            Aus
+          {% endif %}
+
+  - binary_sensor:
+      # ─── WP läuft (für Laufzeit-Messung) ───────────────────
+      - name: "WP Laeuft"
+        state: >
+          {{ states('sensor.mitsubishi_wp_warmepumpe_frequenz') | float(0) > 5 }}
+
+# ─── Laufzeit heute (history_stats) ──────────────────────────
+sensor:
+  - platform: history_stats
+    name: "WP Laufzeit Heute"
+    entity_id: binary_sensor.wp_laeuft
+    state: "on"
+    type: time
+    start: "{{ now().replace(hour=0, minute=0, second=0) }}"
+    end: "{{ now() }}"

@@ -1,10 +1,29 @@
 # ============================================================
-# TEMPLATE-SENSOREN (Wärmepumpe & Ladewächter)
+# Template-Sensoren für Mitsubishi Ecodan PV-Boost
+#
+# Diesen Block in die configuration.yaml einfügen.
+# ACHTUNG: Die Shelly Entity-IDs müssen an dein Gerät
+# angepasst werden (MAC-Adresse ersetzen)!
 # ============================================================
 
 template:
   - sensor:
-      # --- Shelly Pro 3EM: WP Verbrauch (Gesamtberechnung) ---
+      # ─── Ladewaechter (mit Hysterese) ───────────────────────
+      - name: "wp_ladewaechter"
+        state: >
+          {% set temp = states('sensor.mitsubishi_wp_isttemperatur_wasserspeicher_tww') | float(0) %}
+          {% set target = states('input_number.wp_soll_temperatur') | float(50) %}
+          {% set current_state = states('sensor.wp_ladewaechter') %}
+          {% if temp < 40 %}
+            True
+          {% elif temp >= target %}
+            False
+          {% else %}
+            {{ current_state | default('False') }}
+          {% endif %}
+
+      # ─── Shelly Pro 3EM: WP Verbrauch ──────────────────────
+      # Phase A = Außeneinheit (3-phasig, 1 Phase gemessen × 3)
       - name: "WP Aussen Gesamt"
         unit_of_measurement: "W"
         device_class: power
@@ -12,6 +31,7 @@ template:
         state: >
           {{ states('sensor.shellypro3em_e08cfe95cbe0_phase_a_leistung') | float(0) * 3 }}
 
+      # Phase B = Heizstab (3-phasig, 1 Phase gemessen × 3)
       - name: "WP Heizstab Gesamt"
         unit_of_measurement: "W"
         device_class: power
@@ -19,6 +39,7 @@ template:
         state: >
           {{ states('sensor.shellypro3em_e08cfe95cbe0_phase_b_leistung') | float(0) * 3 }}
 
+      # Phase C = Innenmodul (1-phasig, direkt)
       - name: "WP Innen Gesamt"
         unit_of_measurement: "W"
         device_class: power
@@ -26,6 +47,7 @@ template:
         state: >
           {{ states('sensor.shellypro3em_e08cfe95cbe0_phase_c_leistung') | float(0) }}
 
+      # Gesamtverbrauch WP (Summe aller drei)
       - name: "WP Gesamtverbrauch"
         unit_of_measurement: "W"
         device_class: power
@@ -35,16 +57,7 @@ template:
            + (states('sensor.shellypro3em_e08cfe95cbe0_phase_b_leistung') | float(0) * 3)
            + (states('sensor.shellypro3em_e08cfe95cbe0_phase_c_leistung') | float(0)) }}
 
-      - name: "WP Betriebsart Numerisch"
-        state: >
-          {{ states('sensor.mitsubishi_wp_betriebsart_raw') | int(0) }}
-        state_class: measurement
-        attributes:
-          modus: >
-            {% set modi = {0: 'Stopp', 1: 'Warmwasser', 2: 'Heizen', 3: 'Kühlen'} %}
-            {{ modi.get(states('sensor.mitsubishi_wp_betriebsart_raw') | int(0), 'Unbekannt') }}
-
-      # --- Wärmeleistung aus Durchfluss und Temperaturdifferenz ---
+      # ─── Wärmeleistung aus Modbus-Daten ────────────────────
       - name: "WP Waermeleistung"
         unit_of_measurement: "W"
         device_class: power
@@ -60,7 +73,7 @@ template:
             0
           {% endif %}
 
-      # --- COP Momentan (behält letzten Wert) ---
+      # ─── COP Momentan (behält letzten Wert) ────────────────
       - name: "WP COP"
         unit_of_measurement: ""
         state: >
@@ -74,7 +87,7 @@ template:
             {{ this.state | default(0) }}
           {% endif %}
 
-      # --- COP Heute (Tageswert) ---
+      # ─── COP Heute (Tageswert) ─────────────────────────────
       - name: "WP COP Heute"
         unit_of_measurement: ""
         state: >
@@ -86,26 +99,7 @@ template:
             {{ this.state | default(0) }}
           {% endif %}
 
-      # --- Ladewächter: Schichtspeicher-Steuerung (40/50/60 Logik) ---
-      # Ein bei < 40°C, Aus bei > 50°C (bzw. 60°C im Boost)
-      - name: "WP Ladewaechter"
-        state: >
-          {% set temp = states('sensor.mitsubishi_wp_isttemperatur_wasserspeicher_tww') | float(99) %}
-          {% set boost = is_state('input_boolean.wp_boost_aktiv', 'on') %}
-          {% set ist_an = is_state('switch.wp_thermostat_in_1', 'on') %}
-
-          {% if temp < 40 %}
-            True
-          {% elif boost and temp >= 60 %}
-            False
-          {% elif not boost and temp >= 50 %}
-            False
-          {% else %}
-            {# Behalte den aktuellen Zustand bei (Hysterese) #}
-            {{ 'True' if ist_an else 'False' }}
-          {% endif %}
-
-      # --- Durchschnittliche Laufzeit pro Zyklus ---
+      # ─── Durchschnittliche Laufzeit pro Zyklus ─────────────
       - name: "WP Laufzeit pro Zyklus"
         unit_of_measurement: "min"
         state: >
@@ -117,7 +111,7 @@ template:
             0
           {% endif %}
 
-      # --- Taktungsbewertung ---
+      # ─── Taktungsbewertung ─────────────────────────────────
       - name: "WP Taktungsbewertung"
         state: >
           {% set starts = states('counter.wp_starts_heute') | int(0) %}
@@ -127,33 +121,28 @@ template:
           {% if starts == 0 and laeuft == 'on' %}
             🟢 Dauerlauf
           {% elif starts == 0 %}
-            Kein Betrieb
+            {{ this.state | default('Kein Betrieb') }}
           {% elif starts <= 2 %}
             🟢 Optimal
           {% elif starts <= 4 and avg_min >= 30 %}
             🟢 Gut
-          {% elif starts <= 6 %}
+          {% elif starts <= 4 %}
             🟡 Normal
+          {% elif starts <= 8 and avg_min >= 15 %}
+            🟡 Normal
+          {% elif starts <= 8 %}
+            🟠 Beobachten
           {% else %}
             🔴 Kritisch
           {% endif %}
 
-      # --- Nachtabsenkung aktiv Anzeige ---
-      - name: "WP Nachtabsenkung"
-        state: >
-          {% if now().hour >= 21 or now().hour < 3 %}
-            Aktiv (Soll -3°C)
-          {% else %}
-            Aus
-          {% endif %}
-
   - binary_sensor:
-      # --- WP läuft (für Laufzeit-Messung) ---
+      # ─── WP läuft (für Laufzeit-Messung) ───────────────────
       - name: "WP Laeuft"
         state: >
           {{ states('sensor.mitsubishi_wp_warmepumpe_frequenz') | float(0) > 5 }}
 
-# --- Laufzeit heute (history_stats) ---
+# ─── Laufzeit heute (history_stats) ──────────────────────────
 sensor:
   - platform: history_stats
     name: "WP Laufzeit Heute"

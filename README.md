@@ -1,8 +1,8 @@
 # Mitsubishi Ecodan PV-Boost — Home Assistant Integration
 
-Automatische PV-Überschuss-Steuerung für Mitsubishi Ecodan Wärmepumpen mit Home Assistant, Modbus (Procon A1M), Shelly Pro 3EM und smartem Raumthermostat-Ersatz.
+Automatische PV-Überschuss-Steuerung für Mitsubishi Ecodan Wärmepumpen mit Home Assistant, Modbus (Procon A1M) und Shelly Pro 3EM.
 
-> **Ziel:** Wenn genug Solarstrom vorhanden ist und die Batterie ausreichend geladen ist, wird die Warmwasser-Solltemperatur automatisch von 50°C auf 60°C angehoben. Ein Shelly an IN1 der FTC6 ersetzt den Raumthermostat und steuert den Heizbedarf intelligent basierend auf allen Raumtemperaturen — inklusive Nachtabsenkung.
+> **Ziel:** Wenn genug Solarstrom vorhanden ist und die Batterie ausreichend geladen ist, wird die Warmwasser-Solltemperatur automatisch von 50°C auf 60°C angehoben. Dadurch wird überschüssiger PV-Strom als Wärme gespeichert, die Taktung reduziert und die Eigenverbrauchsquote maximiert.
 
 ---
 
@@ -13,21 +13,16 @@ Automatische PV-Überschuss-Steuerung für Mitsubishi Ecodan Wärmepumpen mit Ho
 - [Voraussetzungen](#voraussetzungen)
 - [Installation](#installation)
   - [1. Modbus-Verbindung](#1-modbus-verbindung)
-  - [2. Shelly Pro 3EM — WP-Verbrauchsmessung](#2-shelly-pro-3em--wp-verbrauchsmessung)
-  - [3. Shelly 1 Mini Gen4 — Thermostat-Ersatz IN1](#3-shelly-1-mini-gen4--thermostat-ersatz-in1)
-  - [4. Home Assistant Konfiguration](#4-home-assistant-konfiguration)
-  - [5. Helfer anlegen](#5-helfer-anlegen)
-  - [6. Automationen einrichten](#6-automationen-einrichten)
-  - [7. Dashboard einrichten](#7-dashboard-einrichten)
+  - [2. Home Assistant Konfiguration](#2-home-assistant-konfiguration)
+  - [3. Helfer anlegen](#3-helfer-anlegen)
+  - [4. Automationen einrichten](#4-automationen-einrichten)
+  - [5. Dashboard einrichten](#5-dashboard-einrichten)
 - [DIP-Switch Einstellungen](#dip-switch-einstellungen)
 - [Modbus Register-Map](#modbus-register-map)
 - [PV-Boost Logik](#pv-boost-logik)
-- [Shelly Thermostat-Logik](#shelly-thermostat-logik)
-- [Nachtabsenkung](#nachtabsenkung)
 - [Taktungsbewertung](#taktungsbewertung)
 - [COP-Berechnung](#cop-berechnung)
 - [Fehlerbehebung](#fehlerbehebung)
-- [Roadmap — Geplante Erweiterungen](#roadmap--geplante-erweiterungen)
 - [Danksagung](#danksagung)
 - [Lizenz](#lizenz)
 
@@ -47,26 +42,18 @@ Automatische PV-Überschuss-Steuerung für Mitsubishi Ecodan Wärmepumpen mit Ho
 │ Mitsubishi       │     │  Home Assistant   │     │ Shelly Pro 3EM  │
 │ Ecodan WP        │◀──▶│  Raspberry Pi 5   │◀───│ WP-Verbrauch    │
 │ PUD-SHWM140YAA  │     │                  │     │ CT1: Außen (×3) │
-│ EHSD-YM9D       │     │  PV-Boost        │     │ CT2: Heizstab(×3)│
+│ EHSD-YM9D       │     │  PV-Boost        │     │ CT2: Heizstab(×3│)
 │ FTC6 Controller  │     │  Automationen    │     │ CT3: Innen (×1) │
-└──┬─────┬─────────┘     └──────┬───────────┘     └─────────────────┘
-   │     │                      │
-   │     │ Modbus RTU           │
-   │     │ RS-485               │
-   │     ▼                      │
-   │  ┌─────────────────┐     ┌┴──────────────────┐
-   │  │ Procon A1M      │     │ Waveshare         │
-   │  │ MelcoBEMS MINI  │◀───▶│ USB to RS-485     │
-   │  │ Modbus Adapter  │     │ /dev/ttyUSB0      │
-   │  └─────────────────┘     └───────────────────┘
-   │
-   │ IN1 (potentialfrei)
-   ▼
-┌─────────────────┐     ┌──────────────────────────┐
-│ Shelly 1 Mini   │     │ Raumthermostaten         │
-│ Gen4             │◀───│ LinkedGo ST1820-W (×8)   │
-│ WP Thermostat   │     │ → Heizbedarf-Logik in HA │
-└─────────────────┘     └──────────────────────────┘
+└────────┬─────────┘     └──────┬───────────┘     └─────────────────┘
+         │                      │
+         │ Modbus RTU           │
+         │ RS-485               │
+         ▼                      │
+┌─────────────────┐     ┌──────┴───────────┐
+│ Procon A1M      │     │ Waveshare        │
+│ MelcoBEMS MINI  │◀───▶│ USB to RS-485    │
+│ Modbus Adapter  │     │ /dev/ttyUSB0     │
+└─────────────────┘     └──────────────────┘
 ```
 
 ---
@@ -80,8 +67,6 @@ Automatische PV-Überschuss-Steuerung für Mitsubishi Ecodan Wärmepumpen mit Ho
 | **Modbus-Adapter** | Procon MelcoBEMS MINI (A1M) | Modbus RTU über RS-485 (Serial) |
 | **USB-Adapter** | Waveshare USB to RS-485 | Anschluss an Home Assistant |
 | **WP-Verbrauchsmessung** | Shelly Pro 3EM (SPEM-003CEBEU) | 3× CT-Klemmen im Sicherungskasten |
-| **Thermostat-Ersatz** | Shelly 1 Mini Gen4 | Potentialfreier Kontakt an IN1 der FTC6 |
-| **Raumthermostaten** | LinkedGo ST1820-W (×8) | Smart-Thermostate mit Stellantrieben |
 | **Wechselrichter** | FoxESS H3-Pro-15.0 | Hybrid-Wechselrichter |
 | **Batterie** | FoxESS ESC 2900-2 | 17,28 kWh Speicherkapazität |
 | **PV-Anlage** | — | 14,5 kWp |
@@ -107,9 +92,8 @@ Der Shelly Pro 3EM sitzt im Sicherungskasten und misst den WP-Verbrauch über dr
 - HACS installiert (für Mushroom Cards)
 - [Mushroom Cards](https://github.com/piitaya/lovelace-mushroom) installiert
 - Procon A1M korrekt verkabelt (RS-485 → Waveshare → USB → Raspberry Pi)
-- Shelly Pro 3EM und Shelly 1 Mini Gen4 in HA integriert
+- Shelly Pro 3EM in HA integriert
 - FoxESS Integration in HA (für PV-Daten und Batterie-SOC)
-- Raumthermostaten (z.B. LinkedGo ST1820-W) als `climate.*` Entities in HA
 - Folgende HA-Sensoren müssen vorhanden sein:
   - `sensor.pv_power` — aktuelle PV-Leistung in **kW**
   - `sensor.battery_soc_1` — Batterie-Ladezustand in **%**
@@ -122,10 +106,17 @@ Der Shelly Pro 3EM sitzt im Sicherungskasten und misst den WP-Verbrauch über dr
 
 ### 1. Modbus-Verbindung
 
+#### Procon A1M — DIP-Switch Einstellungen
+
+Am Procon A1M folgende DIP-Switches setzen:
+- **DIP 1:** ON
+- **DIP 6:** ON
+- **DIP 7:** ON
+
 #### Verkabelung
 
 ```
-Procon A1M (CN105) ──── Waveshare USB-to-RS485 ──── Raspberry Pi USB
+Procon A1M (RS-485) ──── Waveshare USB-to-RS485 ──── Raspberry Pi USB
     A+ ──────────────────── A+
     B- ──────────────────── B-
     GND ─────────────────── GND (optional)
@@ -139,17 +130,11 @@ Dieses Projekt basiert auf dem [helgeklein Mitsubishi A1M Package](https://githu
 
 Kopiere die Datei `packages/mitsubishi_a1m.yaml` in deinen HA-Ordner `config/packages/`.
 
-> **Wichtig:** Die Datei muss die Endung `.yaml` haben und darf keine Sonderzeichen im Namen enthalten. Home Assistant lädt über `!include_dir_named` nur `.yaml`-Dateien.
-
-> **Hinweis Entity-IDs (Umlaute):** Home Assistant wandelt Umlaute in Entity-IDs je nach Version unterschiedlich um — z.B. wird "Wärmepumpe" zu `warmepumpe` (ohne e) oder `waermepumpe` (mit ae). Die Dateien in diesem Repo verwenden die Variante **ohne e** (`warmepumpe`, `rucklauftemperatur`). Falls dein HA die Variante mit ae/ue erzeugt, musst du die Entity-IDs in den Automationen, Templates und im Dashboard entsprechend anpassen.
-
 Falls der `packages`-Ordner noch nicht existiert, füge in der `configuration.yaml` hinzu:
 
 ```yaml
 homeassistant:
   packages: !include_dir_named packages/
-
-automation: !include automations.yaml
 ```
 
 **Wichtig:** In der `mitsubishi_a1m.yaml` die Modbus-Verbindung anpassen:
@@ -169,64 +154,19 @@ modbus:
 
 ---
 
-### 2. Shelly Pro 3EM — WP-Verbrauchsmessung
+### 2. Home Assistant Konfiguration
 
-Der Shelly Pro 3EM misst den elektrischen Verbrauch der WP über drei CT-Klemmen im Sicherungskasten:
+Füge in der `configuration.yaml` folgende Blöcke hinzu:
 
-- **CT1 (Phase A)** → Außeneinheit (1 Phase von 3)
-- **CT2 (Phase B)** → Heizstab (1 Phase von 3)
-- **CT3 (Phase C)** → Innenmodul (1-phasig)
+#### Automationen einbinden
 
-In HA werden daraus per Template-Sensor die Gesamtwerte berechnet (siehe `configuration_templates.yaml`).
-
-> **Wichtig:** Die Entity-IDs der Shelly-Sensoren enthalten die MAC-Adresse des Geräts. Diese muss in den Template-Sensoren angepasst werden (Platzhalter `XXXXXXXXXXXX` ersetzen).
-
----
-
-### 3. Shelly 1 Mini Gen4 — Thermostat-Ersatz IN1
-
-Der Shelly 1 Mini Gen4 ersetzt den originalen Mitsubishi Raumthermostat und wird direkt im WP-Innengerät verbaut.
-
-#### Funktionsweise
-
-- **Relais ON** (Kontakt geschlossen) = Heizbedarf → FTC gibt Heizung frei
-- **Relais OFF** (Kontakt offen) = kein Heizbedarf → FTC stoppt Heizung Zone 1
-
-> **Wichtig:** Der Shelly gibt der FTC nur die **Erlaubnis** zu heizen — er zwingt sie nicht. Die FTC entscheidet weiterhin selbstständig wann und was sie macht (Heizen, Warmwasser oder Stopp).
-
-#### Verkabelung
-
-```
-Shelly 1 Mini Gen4          WP Innengerät
-────────────────────────────────────────────
-  L  ──────────────────── Klemme L (230V)
-  N  ──────────────────── Klemme N
-  O  ──────────────────── IN1 Pin 1 (TBI.1)
-  I  ──────────────────── IN1 Pin 2 (TBI.1)
-  SW ──────────────────── frei (nicht anschließen)
+```yaml
+automation: !include automations.yaml
 ```
 
-> **ACHTUNG:** Die Klemme **I** wird **NICHT** mit **L** verbunden! I und O gehen beide direkt auf IN1 — dadurch ist der Kontakt potentialfrei. 230V auf IN1 würde die FTC6-Platine zerstören!
+#### Template-Sensoren
 
-#### Shelly-Einstellungen
-
-| Einstellung | Wert | Begründung |
-|---|---|---|
-| Eingang (SW) | Deaktiviert | Keine physische Bedienung |
-| Ausgang | Schalter | Dauerhaft ON oder OFF |
-| Startzustand nach Stromausfall | **AN** | WP darf sofort heizen nach Stromausfall |
-
-#### FTC6 DIP-Switch
-
-**SW2-1 muss auf ON** stehen — aktiviert den externen Thermostat-Eingang IN1 für Zone 1.
-
-> **Warnung:** SW2-1 nur auf ON setzen wenn der Shelly angeschlossen und in HA eingebunden ist! Ohne angeschlossenen Kontakt interpretiert die FTC "offener Kontakt" als "kein Heizbedarf" und die Heizung für Zone 1 stoppt.
-
----
-
-### 4. Home Assistant Konfiguration
-
-Füge in der `configuration.yaml` den Inhalt von `configuration_templates.yaml` aus diesem Repo ein.
+Kopiere den Inhalt von `configuration_templates.yaml` aus diesem Repo in deine `configuration.yaml`.
 
 Die Template-Sensoren umfassen:
 
@@ -236,41 +176,43 @@ Die Template-Sensoren umfassen:
 | `sensor.wp_heizstab_gesamt` | Heizstab Leistung (Phase B × 3) |
 | `sensor.wp_innen_gesamt` | Innenmodul Leistung (Phase C × 1) |
 | `sensor.wp_gesamtverbrauch` | Gesamter elektrischer WP-Verbrauch in W |
-| `sensor.wp_waermeleistung` | Erzeugte Wärmeleistung (Durchfluss × Temperaturdifferenz) |
+| `sensor.wp_waermeleistung` | Erzeugte Wärmeleistung aus Durchfluss und Temperaturdifferenz |
 | `sensor.wp_cop` | COP Momentanwert (behält letzten Wert bei WP-Stopp) |
 | `sensor.wp_cop_heute` | COP Tageswert |
-| `sensor.wp_laufzeit_pro_zyklus` | Ø Laufzeit pro Zyklus in Minuten |
-| `sensor.wp_taktungsbewertung` | Gesamtbewertung (Optimal/Gut/Normal/Beobachten/Kritisch) |
-| `sensor.wp_heizbedarf` | True wenn mindestens ein Raum unter Soll |
-| `sensor.wp_nachtabsenkung` | Anzeige ob Nachtabsenkung aktiv |
+| `sensor.wp_laufzeit_pro_zyklus` | Durchschnittliche Laufzeit pro Zyklus in Minuten |
+| `sensor.wp_taktungsbewertung` | Gesamtbewertung der Taktung (Optimal/Normal/Beobachten/Kritisch) |
 | `binary_sensor.wp_laeuft` | WP läuft (Frequenz > 5 Hz) |
-| `sensor.wp_laufzeit_heute` | Gesamte Laufzeit heute in Stunden |
+| `sensor.wp_laufzeit_heute` | Gesamte Laufzeit heute in Stunden (history_stats) |
+
+> **Wichtig:** Die Entity-IDs der Shelly-Sensoren müssen an dein Gerät angepasst werden! Suche in den Templates nach `shellypro3em_e08cfe95cbe0` und ersetze die MAC-Adresse durch deine eigene.
 
 ---
 
-### 5. Helfer anlegen
+### 3. Helfer anlegen
+
+Folgende Helfer müssen in Home Assistant über die UI angelegt werden:
 
 **Einstellungen → Helfer → + Helfer erstellen**
 
 #### Schalter (Toggle)
 
-| Name | Entity-ID |
-|---|---|
-| WP Boost aktiv | `input_boolean.wp_boost_aktiv` |
+| Name | Entity-ID | Beschreibung |
+|---|---|---|
+| WP Boost aktiv | `input_boolean.wp_boost_aktiv` | Zeigt an ob der PV-Boost aktiv ist |
 
 #### Nummer (Number)
 
-| Name | Min | Max | Schritt | Einheit |
-|---|---|---|---|---|
-| WP Soll Temperatur | 40 | 60 | 1 | °C |
+| Name | Entity-ID | Min | Max | Schritt | Einheit |
+|---|---|---|---|---|---|
+| WP Soll Temperatur | `input_number.wp_soll_temperatur` | 40 | 60 | 1 | °C |
 
 #### Zähler (Counter)
 
-| Name | Anfangswert | Minimum | Schritt |
-|---|---|---|---|
-| WP Starts Heute | 0 | 0 | 1 |
+| Name | Entity-ID | Anfangswert | Minimum | Schritt |
+|---|---|---|---|---|
+| WP Starts Heute | `counter.wp_starts_heute` | 0 | 0 | 1 |
 
-> **Wichtig:** Beim Counter darauf achten, dass **Maximum** nicht auf 0 gesetzt wird!
+> **Wichtig:** Beim Counter darauf achten, dass **Maximum** nicht auf 0 gesetzt wird, sonst kann der Counter nie hochzählen!
 
 #### Integration — Riemann-Summenintegral
 
@@ -290,43 +232,67 @@ Die Template-Sensoren umfassen:
 
 ---
 
-### 6. Automationen einrichten
+### 4. Automationen einrichten
 
-Kopiere den Inhalt von `automations.yaml` aus diesem Repo in `config/automations.yaml`.
+Kopiere den Inhalt von `automations.yaml` aus diesem Repo in deine HA-Datei `config/automations.yaml`.
 
-#### Übersicht (14 Automationen)
+#### Übersicht der Automationen
 
 | Nr | Name | Beschreibung |
 |---|---|---|
-| 1 | WP Taktung - Start zählen | Zählt WP-Starts (Frequenz > 5 Hz für 1 Min) |
+| 1 | WP Taktung - Start zählen | Zählt WP-Starts (Frequenz > 5 Hz für 5 Min — ignoriert Abtauzyklen) |
 | 2 | WP Taktung - Reset Mitternacht | Setzt Counter täglich auf 0 |
-| 3 | **WP Boost aktivieren** | Soll auf 60°C bei PV > 1 kW, Batterie > 70%, TWW < 48°C |
-| 4 | **WP Boost beenden** | Zurück auf 50°C bei PV < 0.8 kW, Batterie < 65% oder 21:00 |
-| 5 | **WP Boost Ziel erreicht** | Zurück auf 50°C bei TWW > 59°C |
-| 6 | **WP Boost WP gestoppt** | Zurück auf 50°C wenn WP 5 Min stoppt |
-| 7 | WP Soll manuell setzen | Slider im Dashboard schreibt Soll per Modbus |
-| 8 | **WP Thermostat Heizbedarf AN** | Shelly ON wenn ein Raum unter Soll |
-| 9 | **WP Thermostat Heizbedarf AUS** | Shelly OFF wenn alle Räume über Soll (10 Min Verzögerung) |
-| 10 | **WP Nachtabsenkung Start** | 21:00 — alle Thermostaten Soll -3°C |
-| 11 | **WP Nachtabsenkung Ende** | 03:00 — alle Thermostaten Soll +3°C zurück |
-
-> Dazu kommen die Weihnachtsbeleuchtung-Automationen (projektunabhängig) und ggf. weitere eigene Automationen.
+| 3 | **WP Boost aktivieren** | Soll auf 60°C wenn PV > 1 kW, Batterie > 70%, TWW < 48°C |
+| 4 | **WP Boost beenden** | Zurück auf 50°C wenn PV < 0.8 kW, Batterie < 65% oder 21:00 Uhr |
+| 5 | **WP Boost Ziel erreicht** | Zurück auf 50°C wenn Speicher 59°C erreicht |
+| 6 | WP Soll manuell setzen | Schreibt Soll-Temperatur wenn Slider im Dashboard geändert wird |
 
 ---
 
-### 7. Dashboard einrichten
+### 5. Dashboard einrichten
 
 Kopiere den Inhalt von `dashboards/wp_dashboard.yaml` als manuelle YAML-Karte in dein Dashboard.
+
+**Dashboard → Bearbeiten → Karte hinzufügen → Manuell (YAML)**
 
 Das Dashboard zeigt:
 - WP-Status (Läuft/Aus) mit Verdichterfrequenz
 - Speicher-, Soll- und Außentemperatur
-- Batterie-SOC, PV-Erzeugung, Einspeisung, aktuelle PV-Leistung
+- Batterie-SOC, PV-Erzeugung, Einspeisung, PV-Leistung
 - Verdichter Hz, Vorlauf, Betriebsart, WP-Leistung
-- Soll-Temperatur TWW mit +/− Tasten
+- Soll-Temperatur Slider (+/− Tasten)
 - COP Momentan und COP Heute
 - WP-Verbrauch Heute/Monat/Jahr
 - Taktung (Starts + Ø Laufzeit), Bewertung, PV-Boost Status
+
+---
+
+## Wärmepumpen-Konfiguration (FTC6 Touch-Display)
+
+Um das gefürchtete Takten (kurze Start-Stopp-Zyklen) der Wärmepumpe zu minimieren, ist es entscheidend, nicht nur die Home Assistant Automationen anzupassen, sondern auch die **physikalischen Einstellungen im Fachhandwerkermenü** des FTC6-Controllers zu optimieren. 
+
+Folgende Parameter haben wir als optimal ermittelt:
+
+### 1. TWW-Vorrang (Warmwasser-Priorität / Ladezeit)
+Stelle sicher, dass die WP nicht ständig zwischen Heizen und Warmwasser hin- und herspringt.
+* **Max. TWW-Ladezeit:** z. B. `60 Min`
+* **TWW-Sperrzeit (Dauer bis zum nächsten möglichen TWW-Start):** z. B. `30 Min`
+* *Hintergrund:* So wird garantiert, dass das Haus nach einer Warmwasser-Ladung (wie unserem PV-Boost) auch wieder Zeit hat, Wärme für den Heizkreis zu produzieren, bevor direkt wieder TWW nachgeladen wird.
+
+### 2. Hysterese-Einstellungen (Einschaltdifferenz)
+Die Hysterese bestimmt, wie weit die Temperatur fallen darf, bevor die WP wieder anspringt.
+* **TWW Hysterese (Einschaltdifferenz):** Auf `-3 K` bis `-5 K` erhöhen (im Vergleich zum oft engen Werksstandard).
+* *Hintergrund:* Nach dem PV-Boost auf 60°C kühlt der Speicher so in Ruhe ab, bevor die WP wegen "Warmwasserbedarf" wieder anspringt. Das bringt enorm lange Betriebs- und Pausenzeiten.
+
+### 3. Sperrzeiten (Kompressor-Verzögerung)
+* **Verdichter-Stillstandszeit (Mindestpause):** Auf z. B. `10 Min` bis `20 Min` erhöhen.
+* *Hintergrund:* Ein sofortiges Wiederanspringen nach dem Abschalten (z. B. durch kleine Temperatur-Schwankungen) wird physikalisch von der FTC6-Steuerung blockiert. Das schont den Verdichter enorm.
+
+### 4. Einsatzgrenzen (AT-Bivalenzpunkt / Heizgrenze)
+* **Heizgrenztemperatur (Sommerabschaltung):** z. B. bei `+15°C` Außentemperatur.
+* *Hintergrund:* Bei übertrieben milden Temperaturen draußen kann die WP ihre Minimalleistung ohnehin nicht mehr richtig ans Heizwasser abgeben und taktet zwingend. Ab dieser Außentemperatur wird der Heizbetrieb daher komplett gesperrt und die WP macht nur noch Warmwasser.
+
+> **Achtung:** Die ganz exakten Werte können je nach Gebäudedämmung und Flächenheizung leicht variieren. Diese Optionen (Vorrang, Hysterese, Sperrzeiten, Einsatzgrenzen) haben sich aber als die entscheidenden Hebel im FTC6-Menü erwiesen, um die Start-Zyklen der Ecodan signifikant in den Griff zu bekommen!
 
 ---
 
@@ -339,27 +305,31 @@ Das Dashboard zeigt:
 | Schalter | Stellung | Funktion |
 |---|---|---|
 | SW1-1 | **ON** | Monoblock-Wärmepumpe |
+| SW1-2 | OFF | — |
 | SW1-3 | **ON** | Warmwasserbetrieb aktiv |
+| SW1-4 | OFF | Elektroheizstab nicht über FTC gesteuert |
+| SW1-5 | OFF | — |
 | SW1-6 | **ON** | Modbus-Kommunikation (A1M) |
 | SW1-7 | **ON** | Modbus-Kommunikation (A1M) |
 | SW1-8 | OFF | Keine Mitsubishi Funk-Fernbedienung |
-| Rest | OFF | — |
 
 #### SW2
 
 | Schalter | Stellung | Funktion |
 |---|---|---|
-| SW2-1 | **ON** | Externer Thermostat an IN1 (Shelly) |
+| SW2-1 | **ON** | Externer Thermostat an IN1 (Zone 1) — nur setzen wenn Shelly angeschlossen! |
+| SW2-2 bis SW2-7 | OFF | — |
 | SW2-8 | **ON** | Strömungswächter aktiv |
-| Rest | OFF | — |
+
+> **Wichtig:** SW2-1 nur auf ON setzen, wenn ein potentialfreier Kontakt (z.B. Shelly 1PM Mini Gen3) an IN1 auf TBI.1 angeschlossen ist! Ohne angeschlossenen Kontakt interpretiert die FTC "offener Kontakt" als "kein Heizbedarf" und die Heizung für Zone 1 stoppt.
 
 #### Procon A1M
 
-| DIP | Stellung |
-|---|---|
-| DIP 1 | **ON** |
-| DIP 6 | **ON** |
-| DIP 7 | **ON** |
+| DIP | Stellung | Funktion |
+|---|---|---|
+| DIP 1 | **ON** | — |
+| DIP 6 | **ON** | — |
+| DIP 7 | **ON** | — |
 
 ---
 
@@ -380,13 +350,29 @@ Das Dashboard zeigt:
 
 ### Wichtige Register (Holding Register)
 
-| Register | Beschreibung | Skalierung Lesen | Skalierung Schreiben | Beispiel |
-|---|---|---|---|---|
-| **30** | **TWW-Solltemperatur** | × 0.01 | **× 100** | 5000 = 50°C, 6000 = 60°C |
+| Register | Beschreibung | Skalierung | Lesen | Schreiben | Beispiel |
+|---|---|---|---|---|---|
+| **30** | **TWW-Solltemperatur** | **× 0.01** (lesen) / **× 100** (schreiben) | ✅ | ✅ | 5000 = 50°C, 6000 = 60°C |
+| 31 | TWW-Isttemperatur | × 0.1 | ✅ | ❌ | 500 = 50.0°C |
 
-> **ACHTUNG:** Das helgeklein-Package verwendet Register 53 für die TWW-Solltemperatur. Bei der seriellen A1M-Variante funktioniert **nur Register 30** zum Schreiben mit Skalierung **× 100**. Register 53 reagiert nicht auf Schreibbefehle!
+> **Achtung:** Das helgeklein-Package verwendet Register 53 für die TWW-Solltemperatur. Bei der seriellen A1M-Variante funktioniert **Register 30** mit Skalierung **× 100** beim Schreiben. Register 53 reagiert nicht auf Schreibbefehle.
 
-> **Verzögerung:** Nach einem Schreibbefehl dauert es ca. **1-2 Minuten**, bis der neue Wert von der FTC übernommen wird.
+> **Verzögerung:** Nach einem Schreibbefehl dauert es ca. **1-2 Minuten**, bis der neue Wert von der FTC übernommen und im Modbus-Sensor sichtbar wird.
+
+### Alle Sensoren aus dem helgeklein-Package
+
+Eine vollständige Liste aller verfügbaren Modbus-Sensoren findest du in der Datei `packages/mitsubishi_a1m.yaml`. Die wichtigsten:
+
+| Sensor | Beschreibung |
+|---|---|
+| `sensor.mitsubishi_wp_warmepumpe_frequenz` | Verdichterfrequenz in Hz |
+| `sensor.mitsubishi_wp_isttemperatur_wasserspeicher_tww` | Speichertemperatur TWW |
+| `sensor.mitsubishi_wp_solltemperatur_wasserspeicher_tww` | Solltemperatur TWW |
+| `sensor.mitsubishi_wp_aussentemperatur` | Außentemperatur |
+| `sensor.mitsubishi_wp_vorlauftemperatur_heizkreis_1` | Vorlauftemperatur |
+| `sensor.mitsubishi_wp_rucklauftemperatur` | Rücklauftemperatur |
+| `sensor.mitsubishi_wp_durchflussmenge` | Durchflussmenge in L/min |
+| `sensor.mitsubishi_wp_betriebsart` | Betriebsart (Stopp/Warmwasser/Heizen) |
 
 ---
 
@@ -408,77 +394,47 @@ Das Dashboard zeigt:
                          │
 ┌────────────────────────▼────────────────────────────────┐
 │                    BOOST AKTIV                          │
-│              TWW-Soll: 60°C (Register 30 = 6000)       │
-└───────┬──────────┬──────────┬──────────┬────────────────┘
-        │          │          │          │
-        ▼          ▼          ▼          ▼
-   TWW ≥ 59°C  PV<0.8kW   Bat<65%    21:00 Uhr
-                (5 Min)    (2 Min)
-        │          │          │          │
-        ▼          ▼          ▼          ▼
-   WP stoppt                              
-   (5 Min)                                 
-        │                                  
-        ▼                                  
+│              TWW-Soll: 60°C, Boost: AN                 │
+│         Register 30 = 6000 via Modbus                  │
+└───────┬──────────────────┬─────────────────┬────────────┘
+        │                  │                 │
+        ▼                  ▼                 ▼
+   TWW ≥ 59°C      PV < 0.8 kW (5 Min)   21:00 Uhr
+                   ODER Bat < 65% (2 Min)
+        │                  │                 │
+        ▼                  ▼                 ▼
 ┌───────────────────────────────────────────────────────┐
 │                 BOOST BEENDET                         │
-│           TWW-Soll: zurück auf 50°C (Reg 30 = 5000)  │
-│   Nächster WP-Start erst bei ~43-45°C                 │
+│           TWW-Soll: zurück auf 50°C                   │
+│         Register 30 = 5000 via Modbus                 │
+│                                                       │
+│   WP stoppt → Speicher kühlt langsam ab               │
+│   Von 60°C auf 43°C = lange Stillstandszeit           │
+│   Nächster Start erst bei ~43-45°C                    │
 └───────────────────────────────────────────────────────┘
 ```
 
-### Schwellenwerte
+### Schwellenwerte anpassen
 
-| Parameter | Wert | Beschreibung |
+Die Schwellenwerte können in der `automations.yaml` angepasst werden:
+
+| Parameter | Standard | Beschreibung |
 |---|---|---|
-| PV-Leistung AN | > 1 kW | Minimum PV für Boost |
-| PV-Leistung AUS | < 0.8 kW | PV zu niedrig |
-| Batterie AN | > 70% | Minimum SOC |
-| Batterie AUS | < 65% | SOC zu niedrig |
-| TWW Start | < 48°C | Boost nur wenn Speicher kühl |
-| TWW Ziel | > 59°C | Zieltemperatur erreicht |
+| PV-Leistung AN | > 1 kW | Minimum PV für Boost-Aktivierung |
+| PV-Leistung AUS | < 0.8 kW | PV zu niedrig, Boost beenden |
+| Batterie AN | > 70% | Minimum SOC für Boost |
+| Batterie AUS | < 65% | SOC zu niedrig, Boost beenden |
+| TWW Start | < 48°C | Boost nur wenn Speicher noch kühl |
+| TWW Ziel | > 59°C | Boost beenden, Zieltemperatur erreicht |
 | Boost-Temp | 60°C | Erhöhte Solltemperatur |
 | Normal-Temp | 50°C | Standard-Solltemperatur |
 | Zeitfenster | 07:00 – 21:00 | Boost nur tagsüber |
 
 ---
 
-## Shelly Thermostat-Logik
-
-Der Shelly 1 Mini Gen4 an IN1 steuert den Heizbedarf für Zone 1 basierend auf den Raumtemperaturen aller Thermostaten:
-
-| Bedingung | Shelly | FTC |
-|---|---|---|
-| Mindestens ein Raum **unter** Soll | ON | Heizung freigegeben |
-| Alle Räume **über** Soll (10 Min) | OFF | Heizung gesperrt |
-
-### Vorteile gegenüber originalem Thermostat
-
-- **Alle Räume** werden berücksichtigt, nicht nur ein Referenzraum
-- **Nachtabsenkung** automatisch über HA
-- **Keine kurzen Heiz-Takte** nachts wenn alle Räume warm sind
-- **Stellantriebe** schließen bei Nachtabsenkung → kein Wasser fließt → WP bleibt aus
-
----
-
-## Nachtabsenkung
-
-| Uhrzeit | Aktion |
-|---|---|
-| **21:00** | Alle Thermostaten Soll **-3°C** → Stellantriebe schließen → WP stoppt |
-| **03:00** | Alle Thermostaten Soll **+3°C** zurück → Stellantriebe öffnen → WP darf heizen |
-
-Die Nachtabsenkung setzt die **echten Thermostat-Solltemperaturen** herunter (nicht nur die Logik im Heizbedarf-Sensor). Dadurch:
-
-1. **Stellantriebe schließen** physisch → kein Heizwasser fließt
-2. **Heizbedarf-Sensor** erkennt "alle warm genug" → Shelly OFF
-3. **WP** bekommt kein Signal → keine unnötigen Starts
-
-Ab 03:00 wird zurückgesetzt, damit die Fußbodenheizung 4-6 Stunden hat um die Räume bis morgens auf Normaltemperatur zu bringen.
-
----
-
 ## Taktungsbewertung
+
+Die Taktungsbewertung analysiert die WP-Laufmuster und gibt eine Gesamtnote:
 
 | Starts/Tag | Ø Laufzeit | Bewertung |
 |---|---|---|
@@ -491,29 +447,24 @@ Ab 03:00 wird zurückgesetzt, damit die Fußbodenheizung 4-6 Stunden hat um die 
 | 5–8 | < 15 min | 🟠 Beobachten |
 | 9+ | egal | 🔴 Kritisch |
 
+> **Hinweis:** Abtauzyklen (kurze Stopps < 5 Min) werden durch den `for: 5 minutes` Trigger in der Taktungs-Automation herausgefiltert und nicht als Start gezählt.
+
 ---
 
 ## COP-Berechnung
 
-### Zwei COP-Sensoren
-
-Dieses Projekt erzeugt zwei unabhängige COP-Werte:
-
-1. **`sensor.mitsubishi_wp_cop`** — Wird im Modbus-Package aus WP-internen Leistungsdaten berechnet.
-2. **`sensor.wp_cop`** — Wird in `configuration_templates.yaml` über den externen Shelly Pro 3EM und die Temperaturdifferenz (Vorlauf minus Rücklauf) berechnet. Dieser Wert ist in der Regel genauer, da der Shelly den tatsächlichen Stromverbrauch misst.
-
-Das Dashboard zeigt `sensor.wp_cop` (den externen Wert). Der WP-interne Wert kann zum Vergleich herangezogen werden.
-
-### Vorlauf-Sensoren
-
-Für die COP-Berechnung wird `sensor.mitsubishi_wp_vorlauftemperatur` verwendet (direkt am WP-Ausgang). Im Dashboard wird `sensor.mitsubishi_wp_vorlauftemperatur_heizkreis_1` angezeigt (nach dem Mischer/Heizkreis). Der COP wird am WP-Ausgang berechnet, da dies den tatsächlichen Wirkungsgrad der Wärmepumpe widerspiegelt.
-
 ### COP Momentan
+
+Berechnet aus den Modbus-Werten:
 
 ```
 Wärmeleistung (W) = Durchfluss (L/min) × (Vorlauf - Rücklauf) (°C) × 4186 / 60
 COP = Wärmeleistung (W) / Elektrische Leistung (W)
 ```
+
+- Nur berechnet wenn WP läuft (> 200 W elektrisch)
+- Behält den letzten Wert bei WP-Stopp
+- Farbampel: ≥ 4 grün, ≥ 3 orange, < 3 rot
 
 ### COP Heute (Tageswert)
 
@@ -521,79 +472,49 @@ COP = Wärmeleistung (W) / Elektrische Leistung (W)
 COP Heute = Wärme Heute (kWh) / Strom Heute (kWh)
 ```
 
+Aussagekräftiger als der Momentanwert, da er Anlauf- und Abtauphasen mittelt.
+
 ---
 
 ## Fehlerbehebung
 
 ### Modbus-Verbindung funktioniert nicht
 
-- Prüfe `/dev/ttyUSB0`: `ls -la /dev/ttyUSB*`
+- Prüfe ob `/dev/ttyUSB0` existiert: `ls -la /dev/ttyUSB*`
 - Prüfe Procon A1M DIP-Switches (1, 6, 7 auf ON)
 - Prüfe Baudrate (9600) und Slave-Adresse (1)
+- HA-Logs prüfen: Einstellungen → System → Protokolle → nach `modbus` suchen
 
 ### Solltemperatur wird nicht geändert
 
 - **Register 30** verwenden, nicht Register 53!
 - Skalierung: **× 100** (5000 = 50°C, 6000 = 60°C)
 - Hub-Name muss exakt `mitsubishi-a1m` sein
-- Nach dem Schreiben **1-2 Minuten warten**
+- Nach dem Schreiben **1-2 Minuten warten** — es gibt eine Verzögerung
 
-### WP blockiert (Betriebsart "Stopp")
+### WP Verbrauch zeigt 0
 
-- Prüfe `switch.wp_thermostat_in_1` → muss ON sein
-- Prüfe SW2-1 → muss ON sein wenn Shelly angeschlossen
-- "Stopp" zwischen Zyklen ist **normal** — FTC wechselt intern
-
-### Shelly 1 Mini Gen4 — 230V auf IN1 vermeiden
-
-- **NIEMALS** den Shelly 2PM Gen4 oder andere Shellys mit Netzspannungs-Ausgängen verwenden!
-- Nur Shellys mit **potentialfreiem Relais** (Shelly 1 Mini Gen4, Shelly Plus 1 Mini)
-- Oder ein externes 230V-Koppelrelais dazwischenschalten
-
-### Nachtabsenkung funktioniert nicht
-
-- Prüfe ob alle `climate.*` Entity-IDs korrekt sind
-- Prüfe ob die Automationen aktiviert sind
-- Thermostaten die physisch geschlossen sind (z.B. Eltern) auf niedrige Soll-Temperatur setzen
+- Prüfe ob Shelly Pro 3EM Sensoren Werte liefern
+- MAC-Adresse in den Template-Sensoren prüfen
+- Shelly-Integration in HA neu laden
 
 ### Taktungszähler zählt nicht
 
-- Counter darf **kein Maximum von 0** haben
-- Automation muss aktiviert sein
+- Counter `counter.wp_starts_heute` darf **kein Maximum von 0** haben
+- Automation `WP Taktung - Start zählen` muss aktiviert sein
 - Trigger feuert nur beim **Übergang** von ≤ 5 Hz auf > 5 Hz
 
----
-## ## Roadmap — Geplante Erweiterungen
+### PV Boost löst nicht aus
 
-### 🔜 Smart Meter / TRuDi Integration
-- Digitaler Stromzähler mit TRuDi-Anbindung für offizielle Verbrauchsdaten
-- Exakte Messung von Netzbezug, Einspeisung und Eigenverbrauch
-- Ablösung / Ergänzung der Shelly Pro 3EM Verbrauchsmessung
-
-### 🔜 Flexibler Stromtarif (dynamisch)
-- Anbindung an dynamische Stromtarife (z.B. Tibber, aWATTar, Octopus Energy)
-- WP-Betrieb bevorzugt in günstigen Stunden
-- TWW-Aufheizung in Niedrigpreis-Fenster verschieben
-- Kombination mit PV-Boost: PV-Überschuss hat Vorrang, danach günstigster Tarif
-
-### 🔜 Batterie-Management Optimierung (FoxESS)
-- Intelligentes Laden/Entladen basierend auf Strompreis
-- Batterie laden wenn Strom günstig, entladen wenn teuer
-- Koordination mit WP-Betrieb: WP aus Batterie versorgen wenn kein PV und Strom teuer
-- Eigenverbrauchsoptimierung über den gesamten Tag
-
-### 🔜 Feintuning Heizkurve & Taktungsoptimierung
-- Auswertung der Monitoring-Daten (Kurzzyklen-Erkennung läuft bereits)
-- Automatische Anpassung der Heizfreigabe basierend auf Außentemperatur
-- Mindest-Laufzeiten und Mindest-Pausenzeiten für den Kompressor
-- Saisonale Profile (Übergangszeit vs. Winter)
-
-> **Status:** Diese Features sind in Planung und werden nach und nach ergänzt. Beiträge und Ideen sind willkommen — einfach ein [Issue](https://github.com/Powerjoerg/ecodan-pv-boost/issues) erstellen!
+- Alle Bedingungen prüfen (PV, Batterie, TWW, Zeit, Boost-Status)
+- `input_boolean.wp_boost_aktiv` muss als Helfer angelegt sein
+- `sensor.pv_power` ist in **kW** (nicht W!) — Schwelle ist `above: 1`
 
 ---
+
 ## Danksagung
 
-- **[helgeklein](https://github.com/helgeklein/mitsubishi-heat-pump-modbus-home-assistant)** — Für das hervorragende Modbus-Package für Mitsubishi Wärmepumpen
+- **[helgeklein](https://github.com/helgeklein/mitsubishi-heat-pump-modbus-home-assistant)** — Für das hervorragende Modbus-Package für Mitsubishi Wärmepumpen. Dieses Projekt baut darauf auf und erweitert es um PV-Boost Funktionalität.
 - **Anthropic Claude** — KI-gestützte Entwicklung und Konfiguration
 
 ---

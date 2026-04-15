@@ -50,7 +50,7 @@ cards:
       - type: template
         icon: mdi:solar-power
         icon_color: |-
-          {% if states('sensor.pv_power') | float(0) > 0.01 %}
+          {% if states('sensor.solar_energy_today') | float(0) > 0 %}
             yellow
           {% else %}
             grey

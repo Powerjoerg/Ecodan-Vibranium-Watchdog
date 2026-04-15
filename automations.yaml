@@ -1,4 +1,9 @@
 # ==========================================
+# CHANGELOG
+# v2.1: Modbus Register 31 korrigiert & Shelly Abschaltung gefixt
+# ==========================================
+
+# ==========================================
 # WEIHNACHTSBELEUCHTUNG
 # ==========================================
 - id: weihnachtsbeleuchtung_17_an
@@ -64,12 +69,23 @@
   alias: WP Boost bei PV-Überschuss aktivieren
   description: Erhöht Soll auf 60°C und startet WP, wenn PV-Überschuss vorliegt
   triggers:
+  - entity_id: sensor.wp_ladewaechter
+    to: 'True'
+    for:
+      minutes: 1
+    trigger: state
   - entity_id: sensor.feed_in
     above: 1.2
     for:
       minutes: 5
     trigger: numeric_state
   conditions:
+  - condition: state
+    entity_id: sensor.wp_ladewaechter
+    state: 'True'
+  - condition: numeric_state
+    entity_id: sensor.feed_in
+    above: 1.2
   - condition: numeric_state
     entity_id: sensor.battery_soc_1
     above: 80
@@ -87,7 +103,7 @@
     data:
       hub: mitsubishi-a1m
       slave: 1
-      address: 30
+      address: 31
       value: 6000
   - target:
       entity_id: input_number.wp_soll_temperatur
@@ -119,6 +135,16 @@
     for:
       minutes: 1
     trigger: numeric_state
+  - entity_id: sensor.wp_ladewaechter
+    to: 'False'
+    for:
+      minutes: 1
+    trigger: state
+  - entity_id: sensor.mitsubishi_wp_warmepumpe_frequenz
+    below: 1
+    for:
+      minutes: 5
+    trigger: numeric_state
   conditions:
   - condition: state
     entity_id: input_boolean.wp_boost_aktiv
@@ -128,7 +154,7 @@
     data:
       hub: mitsubishi-a1m
       slave: 1
-      address: 30
+      address: 31
       value: 5000
   - target:
       entity_id: input_number.wp_soll_temperatur
@@ -138,6 +164,13 @@
   - target:
       entity_id: input_boolean.wp_boost_aktiv
     action: input_boolean.turn_off
+  - target:
+      entity_id: switch.wp_thermostat_in_1
+    action: switch.turn_off
+  - action: notify.persistent_notification
+    data:
+      title: WP Boost beendet
+      message: "PV-Boost beendet. Solltemperatur auf 50°C gesetzt."
   mode: single
 
 # ==========================================

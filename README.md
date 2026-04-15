@@ -184,7 +184,7 @@ Die Template-Sensoren umfassen:
 | `binary_sensor.wp_laeuft` | WP läuft (Frequenz > 5 Hz) |
 | `sensor.wp_laufzeit_heute` | Gesamte Laufzeit heute in Stunden (history_stats) |
 
-> **Wichtig:** Die Entity-IDs der Shelly-Sensoren müssen an dein Gerät angepasst werden! Suche in den Templates nach `shellypro3em_e08cfe95cbe0` und ersetze die MAC-Adresse durch deine eigene.
+> **Wichtig:** Die Entity-IDs der Shelly-Sensoren müssen an dein Gerät angepasst werden! Suche in den Templates nach `shellypro3em_xxxxxxxxxxxx` und ersetze die MAC-Adresse durch deine eigene.
 
 ---
 

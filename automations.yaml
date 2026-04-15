@@ -187,13 +187,13 @@
   conditions:
   - condition: template
     value_template: >
-      {{ states('sensor.myenergi_zappi_15553841_plug_status') in ['Connected', 'Charging', 'Waiting for EV'] }}
+      {{ states('sensor.myenergi_zappi_xxxxxxxx_plug_status') in ['Connected', 'Charging', 'Waiting for EV'] }}
   - condition: numeric_state
     entity_id: sensor.battery_soc_1
     above: 80
   actions:
   - target:
-      entity_id: select.myenergi_zappi_15553841_charge_mode
+      entity_id: select.myenergi_zappi_xxxxxxxx_charge_mode
     data:
       option: ECO+
     action: select.select_option
@@ -207,10 +207,10 @@
   conditions:
   - condition: template
     value_template: >
-      {{ states('sensor.myenergi_zappi_15553841_plug_status') in ['Connected', 'Charging', 'Waiting for EV'] }}
+      {{ states('sensor.myenergi_zappi_xxxxxxxx_plug_status') in ['Connected', 'Charging', 'Waiting for EV'] }}
   actions:
   - target:
-      entity_id: select.myenergi_zappi_15553841_charge_mode
+      entity_id: select.myenergi_zappi_xxxxxxxx_charge_mode
     data:
       option: FAST
     action: select.select_option
@@ -225,7 +225,7 @@
     event: sunset
   actions:
   - target:
-      entity_id: select.myenergi_zappi_15553841_charge_mode
+      entity_id: select.myenergi_zappi_xxxxxxxx_charge_mode
     data:
       option: 'Off'
     action: select.select_option
@@ -275,39 +275,39 @@
   actions:
   - action: climate.set_temperature
     data:
-      temperature: "{{ state_attr('climate.st1820_80b54e38809c', 'temperature') | float - 3 }}"
+      temperature: "{{ state_attr('climate.st1820_xxxxxxxxxxxx', 'temperature') | float - 3 }}"
     target:
-      entity_id: climate.st1820_80b54e38809c
+      entity_id: climate.st1820_xxxxxxxxxxxx
   - delay: "00:15:00"
   - action: climate.set_temperature
     data:
-      temperature: "{{ state_attr('climate.st1820_b08184f2dbc8', 'temperature') | float - 3 }}"
+      temperature: "{{ state_attr('climate.st1820_xxxxxxxxxxxx', 'temperature') | float - 3 }}"
     target:
-      entity_id: climate.st1820_b08184f2dbc8
+      entity_id: climate.st1820_xxxxxxxxxxxx
   - delay: "00:15:00"
   - action: climate.set_temperature
     data:
-      temperature: "{{ state_attr('climate.st1820_b08184f4860c', 'temperature') | float - 3 }}"
+      temperature: "{{ state_attr('climate.st1820_xxxxxxxxxxxx', 'temperature') | float - 3 }}"
     target:
-      entity_id: climate.st1820_b08184f4860c
+      entity_id: climate.st1820_xxxxxxxxxxxx
   - delay: "00:15:00"
   - action: climate.set_temperature
     data:
-      temperature: "{{ state_attr('climate.st1820_b08184f48e64', 'temperature') | float - 3 }}"
+      temperature: "{{ state_attr('climate.st1820_xxxxxxxxxxxx', 'temperature') | float - 3 }}"
     target:
-      entity_id: climate.st1820_b08184f48e64
+      entity_id: climate.st1820_xxxxxxxxxxxx
   - delay: "00:15:00"
   - action: climate.set_temperature
     data:
-      temperature: "{{ state_attr('climate.st1820_b08184f5c164', 'temperature') | float - 3 }}"
+      temperature: "{{ state_attr('climate.st1820_xxxxxxxxxxxx', 'temperature') | float - 3 }}"
     target:
-      entity_id: climate.st1820_b08184f5c164
+      entity_id: climate.st1820_xxxxxxxxxxxx
   - delay: "00:15:00"
   - action: climate.set_temperature
     data:
-      temperature: "{{ state_attr('climate.st1820_b08184f67248', 'temperature') | float - 3 }}"
+      temperature: "{{ state_attr('climate.st1820_xxxxxxxxxxxx', 'temperature') | float - 3 }}"
     target:
-      entity_id: climate.st1820_b08184f67248
+      entity_id: climate.st1820_xxxxxxxxxxxx
   - delay: "00:15:00"
   - action: climate.set_temperature
     data:
@@ -330,39 +330,39 @@
   actions:
   - action: climate.set_temperature
     data:
-      temperature: "{{ state_attr('climate.st1820_80b54e38809c', 'temperature') | float + 3 }}"
+      temperature: "{{ state_attr('climate.st1820_xxxxxxxxxxxx', 'temperature') | float + 3 }}"
     target:
-      entity_id: climate.st1820_80b54e38809c
+      entity_id: climate.st1820_xxxxxxxxxxxx
   - delay: "00:15:00"
   - action: climate.set_temperature
     data:
-      temperature: "{{ state_attr('climate.st1820_b08184f2dbc8', 'temperature') | float + 3 }}"
+      temperature: "{{ state_attr('climate.st1820_xxxxxxxxxxxx', 'temperature') | float + 3 }}"
     target:
-      entity_id: climate.st1820_b08184f2dbc8
+      entity_id: climate.st1820_xxxxxxxxxxxx
   - delay: "00:15:00"
   - action: climate.set_temperature
     data:
-      temperature: "{{ state_attr('climate.st1820_b08184f4860c', 'temperature') | float + 3 }}"
+      temperature: "{{ state_attr('climate.st1820_xxxxxxxxxxxx', 'temperature') | float + 3 }}"
     target:
-      entity_id: climate.st1820_b08184f4860c
+      entity_id: climate.st1820_xxxxxxxxxxxx
   - delay: "00:15:00"
   - action: climate.set_temperature
     data:
-      temperature: "{{ state_attr('climate.st1820_b08184f48e64', 'temperature') | float + 3 }}"
+      temperature: "{{ state_attr('climate.st1820_xxxxxxxxxxxx', 'temperature') | float + 3 }}"
     target:
-      entity_id: climate.st1820_b08184f48e64
+      entity_id: climate.st1820_xxxxxxxxxxxx
   - delay: "00:15:00"
   - action: climate.set_temperature
     data:
-      temperature: "{{ state_attr('climate.st1820_b08184f5c164', 'temperature') | float + 3 }}"
+      temperature: "{{ state_attr('climate.st1820_xxxxxxxxxxxx', 'temperature') | float + 3 }}"
     target:
-      entity_id: climate.st1820_b08184f5c164
+      entity_id: climate.st1820_xxxxxxxxxxxx
   - delay: "00:15:00"
   - action: climate.set_temperature
     data:
-      temperature: "{{ state_attr('climate.st1820_b08184f67248', 'temperature') | float + 3 }}"
+      temperature: "{{ state_attr('climate.st1820_xxxxxxxxxxxx', 'temperature') | float + 3 }}"
     target:
-      entity_id: climate.st1820_b08184f67248
+      entity_id: climate.st1820_xxxxxxxxxxxx
   - delay: "00:15:00"
   - action: climate.set_temperature
     data:

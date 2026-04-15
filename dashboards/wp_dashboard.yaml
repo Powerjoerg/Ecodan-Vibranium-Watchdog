@@ -231,12 +231,14 @@ cards:
       - type: custom:mushroom-template-card
         entity: counter.wp_starts_heute
         primary: Taktung
+        multiline_secondary: true
         secondary: |-
           {% set starts = states('counter.wp_starts_heute') | int(0) %}
-          {{ starts }} Starts
           {% set lz = states('sensor.wp_laufzeit_pro_zyklus') | float(0) %}
-          {% if starts > 0 %}
-            Ø {{ lz | round(0) }} min
+          {{ starts }} Starts (Ø {{ lz | round(0) }} min)
+          {% set abtau = states('counter.wp_abtauzyklen_heute') | int(0) %}
+          {% if abtau > 0 %}
+            ❄️ {{ abtau }} Abtau-Zyklen
           {% endif %}
         icon: mdi:restart
         icon_color: |-

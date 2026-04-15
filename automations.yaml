@@ -51,7 +51,7 @@
 
 - id: wp_taktung_reset
   alias: WP Taktung - Reset Mitternacht
-  description: Setzt den WP-Start-Zähler jeden Tag um Mitternacht zurück
+  description: Setzt die WP-Zähler jeden Tag um Mitternacht zurück
   triggers:
   - at: '00:00:00'
     trigger: time
@@ -60,6 +60,29 @@
   - target:
       entity_id: counter.wp_starts_heute
     action: counter.reset
+  - target:
+      entity_id: counter.wp_abtauzyklen_heute
+    action: counter.reset
+  - target:
+      entity_id: counter.wp_kurzzyklen_heute
+    action: counter.reset
+  mode: single
+
+- id: wp_abtauzyklus_zaehlen
+  alias: WP Taktung - Abtauzyklus zählen & Filtern
+  description: Zählt Abtauvorgänge und filtert sie aus der Taktung heraus
+  triggers:
+  - entity_id: sensor.mitsubishi_wp_abtaubetrieb_raw
+    to: '2'
+    trigger: state
+  conditions: []
+  actions:
+  - target:
+      entity_id: counter.wp_abtauzyklen_heute
+    action: counter.increment
+  - target:
+      entity_id: counter.wp_starts_heute
+    action: counter.decrement
   mode: single
 
 # ==========================================

@@ -115,6 +115,10 @@ Der Shelly 1 Mini Gen3 wird an der Wärmepumpen-Platine (FTC6) als Raumthermosta
   - `sensor.battery_soc_1` — Batterie-Ladezustand in **%**
   - `sensor.solar_energy_today` — PV-Erzeugung heute in **kWh**
   - `sensor.feed_in_energy_today` — Einspeisung heute in **kWh**
+- Folgende HA-Zähler (Helfer) müssen unter Settings → Geräte & Dienste → Helfer angelegt werden:
+  - `counter.wp_starts_heute`
+  - `counter.wp_kurzzyklen_heute`
+  - `counter.wp_abtauzyklen_heute` (Neu!)
 - Folgende HA-Entität (Schalter) muss zwingend übereinstimmen:
   - `switch.wp_thermostat_in_1` — Dies muss die genaue Entitäts-ID des **Shelly 1 Mini Gen3** sein. Bitte in HA entsprechend umbenennen!
 
@@ -259,9 +263,10 @@ Kopiere den Inhalt von `automations.yaml` aus diesem Repo in deine HA-Datei `con
 | Nr | Name | Beschreibung |
 |---|---|---|
 | 1 | WP Taktung - Start zählen | Zählt WP-Starts (Frequenz > 5 Hz für 1 Min) |
-| 2 | WP Taktung - Reset Mitternacht | Setzt Counter täglich auf 0 |
-| 3 | **WP Boost aktivieren** | Soll auf 60°C wenn PV > 1 kW, Batterie > 70%, TWW < 48°C |
-| 4 | **WP Boost beenden** | Zurück auf 50°C wenn PV < 0.8 kW, Batterie < 65% oder 21:00 Uhr |
+| 2 | WP Taktung - Reset Mitternacht | Setzt Start- und Abtau-Counter täglich auf 0 |
+| 3 | WP Taktung - Abtauzyklus zählen & Filtern | Erkennt Abtauung, filtert den Takt heraus und erhöht Abtau-Zähler |
+| 4 | **WP Boost aktivieren** | Soll auf 60°C wenn PV > 1 kW, Batterie > 70%, TWW < 48°C |
+| 5 | **WP Boost beenden** | Zurück auf 50°C wenn PV < 0.8 kW, Batterie < 65% oder 21:00 Uhr |
 | 5 | **WP Boost Ziel erreicht** | Zurück auf 50°C wenn Speicher 59°C erreicht |
 | 6 | WP Soll manuell setzen | Schreibt Soll-Temperatur wenn Slider im Dashboard geändert wird |
 
@@ -465,7 +470,7 @@ Die Taktungsbewertung analysiert die WP-Laufmuster und gibt eine Gesamtnote:
 | 5–8 | < 15 min | 🟠 Beobachten |
 | 9+ | egal | 🔴 Kritisch |
 
-> **Hinweis:** Da ein Abtaubetrieb die Wärmepumpe physikalisch stoppt und neu anfährt, tauchen diese Zyklen natürlicherweise in der Taktungs-Überwachung als "Starts" auf. An feuchtkalten Wintertagen mit vielen Abtauvorgängen kann die Zahl "Starts/Tag" daher etwas höher ausfallen.
+> **Hinweis:** Da ein Abtaubetrieb die Wärmepumpe physikalisch stoppt und neu anfährt, würde dies normalerweise als "Taktung" gezählt werden. Unsere Automation *WP Taktung - Abtauzyklus zählen & Filtern* greift hier jedoch smart ein: Sie erhöht den neuen `Abtauzyklen`-Zähler und zieht exakt in dem Moment `-1` vom `Starts`-Zähler ab. Wenn die WP nach dem Abtauen also wieder anläuft (+1 Start), hebt sich das physikalisch auf. Damit hast du eine zu 100 % bereinigte "Starts/Tag" Statistik, die nur echte Takte zählt!
 
 ---
 

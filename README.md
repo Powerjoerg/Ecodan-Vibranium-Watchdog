@@ -335,11 +335,11 @@ Die Hysterese bestimmt, wie weit die Temperatur fallen darf, bevor die WP wieder
 
 | Schalter | Stellung | Funktion |
 |---|---|---|
-| SW2-1 | **ON** | Externer Thermostat an IN1 (Zone 1) — nur setzen wenn Shelly angeschlossen! |
+| SW2-1 | **ON** | Externer Thermostat an IN1 (Zone 1) — **Zwingend erforderlich für Shelly Steuerung!** |
 | SW2-2 bis SW2-7 | OFF | — |
 | SW2-8 | **ON** | Strömungswächter aktiv |
 
-> **Wichtig:** SW2-1 nur auf ON setzen, wenn ein potentialfreier Kontakt (z.B. Shelly 1 Mini Gen3) an IN1 auf TBI.1 angeschlossen ist! Ohne angeschlossenen Kontakt interpretiert die FTC "offener Kontakt" als "kein Heizbedarf" und die Heizung für Zone 1 stoppt.
+> **Wichtig:** Da in diesem Konstrukt der **Shelly 1 Mini Gen3** zwingend erforderlich ist, MUSS `SW2-1` auf **ON** stehen! (Hintergrund: Ohne den angeschlossenen Shelly würde die FTC den "offenen Kontakt" an IN1 als "kein Heizbedarf" interpretieren und die Heizung würde dauerhaft stoppen).
 
 #### Procon A1M
 

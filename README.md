@@ -44,16 +44,16 @@ Automatische PV-Überschuss-Steuerung für Mitsubishi Ecodan Wärmepumpen mit Ho
 │ PUD-SHWM140YAA  │     │                  │     │ CT1: Außen (×3) │
 │ EHSD-YM9D       │     │  PV-Boost        │     │ CT2: Heizstab(×3│)
 │ FTC6 Controller  │     │  Automationen    │     │ CT3: Innen (×1) │
-└────────┬─────────┘     └──────┬───────────┘     └─────────────────┘
-         │                      │
-         │ Modbus RTU           │
-         │ RS-485               │
-         ▼                      │
-┌─────────────────┐     ┌──────┴───────────┐
-│ Procon A1M      │     │ Waveshare        │
-│ MelcoBEMS MINI  │◀───▶│ USB to RS-485    │
-│ Modbus Adapter  │     │ /dev/ttyUSB0     │
-└─────────────────┘     └──────────────────┘
+└────────┬─────────┘     └───────┬──┬───────┘     └─────────────────┘
+         │                       │  │
+         │ Modbus RTU            │  │ WLAN
+         │ RS-485                │  │
+         ▼                       │  ▼
+┌─────────────────┐     ┌────────┴─────────┐     ┌─────────────────┐
+│ Procon A1M      │     │ Waveshare        │     │ Shelly 1 Mini   │
+│ MelcoBEMS MINI  │◀───▶│ USB to RS-485    │     │ Thermostat IN1  │
+│ Modbus Adapter  │     │ /dev/ttyUSB0     │     │ (Potentialfrei) │
+└─────────────────┘     └──────────────────┘     └─────────────────┘
 ```
 
 ---
@@ -67,6 +67,7 @@ Automatische PV-Überschuss-Steuerung für Mitsubishi Ecodan Wärmepumpen mit Ho
 | **Modbus-Adapter** | Procon MelcoBEMS MINI (A1M) | Modbus RTU über RS-485 (Serial) |
 | **USB-Adapter** | Waveshare USB to RS-485 | Anschluss an Home Assistant |
 | **WP-Verbrauchsmessung** | Shelly Pro 3EM (SPEM-003CEBEU) | 3× CT-Klemmen im Sicherungskasten |
+| **Thermostat-Steuerung** | Shelly 1 Mini Gen3 | Potentialfreier Kontakt an IN1 (Zone 1) zur Heizungssteuerung |
 | **Wechselrichter** | FoxESS H3-Pro-15.0 | Hybrid-Wechselrichter |
 | **Batterie** | FoxESS ESC 2900-2 | 17,28 kWh Speicherkapazität |
 | **PV-Anlage** | — | 14,5 kWp |
@@ -84,6 +85,20 @@ Der Shelly Pro 3EM sitzt im Sicherungskasten und misst den WP-Verbrauch über dr
 
 > **Hinweis:** Die Außeneinheit und der Heizstab sind 3-phasig angeschlossen. Da nur eine Phase gemessen wird, wird der Messwert ×3 genommen. Der Fehler beträgt ca. 10-15%, was für die Automation ausreichend genau ist.
 
+### Shelly 1 Mini Gen3 — Thermostat-Kontakt (IN1)
+
+Der Shelly 1 Mini Gen3 wird an der Wärmepumpen-Platine (FTC6) als Raumthermostat angeschlossen, um die Heizkreisfreigabe zu steuern. Er agiert als "Schalter", der den Heizbetrieb basierend auf der Logik in Home Assistant zulässt oder blockiert.
+
+**1. Anschlüsse am Shelly:**
+- **L / N:** 230V Spannungsversorgung (am besten vom gleichen Sicherungsautomat wie die WP-Steuerung).
+- **O / I:** Potentialfreier Schließer-Kontakt. 
+
+**2. Anschluss an der FTC6 (Steckerbrett TBI.1):**
+- Die Klemmen **O** und **I** des Shellys werden mit den Klemmen **1** und **2** am Anschluss **IN1** (auf dem Klemmblock TBI.1) der Wärmepumpe verbunden.
+- **Funktion:** Wenn der Shelly einschaltet (Relais geschlossen), erkennt die FTC6 einen geschlossenen Kontakt. Dadurch wird der Raumheiz-Betrieb freigegeben.
+
+> **Extrem wichtig:** Hier darf **nur** ein potentialfreier Kontakt (wie der Shelly 1 Mini Gen3 *ohne* PM) verwendet werden. Schließe **keine 230V** an den IN1-Anschluss an, sonst wird das Mainboard der Wärmepumpe zerstört!
+
 ---
 
 ## Voraussetzungen
@@ -92,13 +107,16 @@ Der Shelly Pro 3EM sitzt im Sicherungskasten und misst den WP-Verbrauch über dr
 - HACS installiert (für Mushroom Cards)
 - [Mushroom Cards](https://github.com/piitaya/lovelace-mushroom) installiert
 - Procon A1M korrekt verkabelt (RS-485 → Waveshare → USB → Raspberry Pi)
-- Shelly Pro 3EM in HA integriert
+- Shelly Pro 3EM in HA integriert (für Verbrauchsmessung)
+- Shelly 1 Mini Gen3 in HA integriert (für Heizkreisfreigabe)
 - FoxESS Integration in HA (für PV-Daten und Batterie-SOC)
 - Folgende HA-Sensoren müssen vorhanden sein:
   - `sensor.pv_power` — aktuelle PV-Leistung in **kW**
   - `sensor.battery_soc_1` — Batterie-Ladezustand in **%**
   - `sensor.solar_energy_today` — PV-Erzeugung heute in **kWh**
   - `sensor.feed_in_energy_today` — Einspeisung heute in **kWh**
+- Folgende HA-Entität (Schalter) muss zwingend übereinstimmen:
+  - `switch.wp_thermostat_in_1` — Dies muss die genaue Entitäts-ID des **Shelly 1 Mini Gen3** sein. Bitte in HA entsprechend umbenennen!
 
 ---
 
@@ -321,7 +339,7 @@ Die Hysterese bestimmt, wie weit die Temperatur fallen darf, bevor die WP wieder
 | SW2-2 bis SW2-7 | OFF | — |
 | SW2-8 | **ON** | Strömungswächter aktiv |
 
-> **Wichtig:** SW2-1 nur auf ON setzen, wenn ein potentialfreier Kontakt (z.B. Shelly 1PM Mini Gen3) an IN1 auf TBI.1 angeschlossen ist! Ohne angeschlossenen Kontakt interpretiert die FTC "offener Kontakt" als "kein Heizbedarf" und die Heizung für Zone 1 stoppt.
+> **Wichtig:** SW2-1 nur auf ON setzen, wenn ein potentialfreier Kontakt (z.B. Shelly 1 Mini Gen3) an IN1 auf TBI.1 angeschlossen ist! Ohne angeschlossenen Kontakt interpretiert die FTC "offener Kontakt" als "kein Heizbedarf" und die Heizung für Zone 1 stoppt.
 
 #### Procon A1M
 

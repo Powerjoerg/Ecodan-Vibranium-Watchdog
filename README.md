@@ -533,7 +533,7 @@ Aussagekräftiger als der Momentanwert, da er Anlauf- und Abtauphasen mittelt.
 ## Danksagung
 
 - **[helgeklein](https://github.com/helgeklein/mitsubishi-heat-pump-modbus-home-assistant)** — Für das hervorragende Modbus-Package für Mitsubishi Wärmepumpen. Dieses Projekt baut darauf auf und erweitert es um PV-Boost Funktionalität.
-- **Anthropic Claude** — KI-gestützte Entwicklung und Konfiguration
+- **Anthropic Claude** & **Google Antigravity Gemini 3.1 Pro** — Intensive KI-gestützte Fehleranalyse, Code-Optimierung und Refactoring in v2
 
 ---
 

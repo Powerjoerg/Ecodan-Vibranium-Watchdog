@@ -258,7 +258,7 @@ Kopiere den Inhalt von `automations.yaml` aus diesem Repo in deine HA-Datei `con
 
 | Nr | Name | Beschreibung |
 |---|---|---|
-| 1 | WP Taktung - Start zählen | Zählt WP-Starts (Frequenz > 5 Hz für 5 Min — ignoriert Abtauzyklen) |
+| 1 | WP Taktung - Start zählen | Zählt WP-Starts (Frequenz > 5 Hz für 1 Min) |
 | 2 | WP Taktung - Reset Mitternacht | Setzt Counter täglich auf 0 |
 | 3 | **WP Boost aktivieren** | Soll auf 60°C wenn PV > 1 kW, Batterie > 70%, TWW < 48°C |
 | 4 | **WP Boost beenden** | Zurück auf 50°C wenn PV < 0.8 kW, Batterie < 65% oder 21:00 Uhr |
@@ -465,7 +465,7 @@ Die Taktungsbewertung analysiert die WP-Laufmuster und gibt eine Gesamtnote:
 | 5–8 | < 15 min | 🟠 Beobachten |
 | 9+ | egal | 🔴 Kritisch |
 
-> **Hinweis:** Abtauzyklen (kurze Stopps < 5 Min) werden durch den `for: 5 minutes` Trigger in der Taktungs-Automation herausgefiltert und nicht als Start gezählt.
+> **Hinweis:** Da ein Abtaubetrieb die Wärmepumpe physikalisch stoppt und neu anfährt, tauchen diese Zyklen natürlicherweise in der Taktungs-Überwachung als "Starts" auf. An feuchtkalten Wintertagen mit vielen Abtauvorgängen kann die Zahl "Starts/Tag" daher etwas höher ausfallen.
 
 ---
 

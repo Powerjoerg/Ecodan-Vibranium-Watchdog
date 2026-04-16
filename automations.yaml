@@ -471,7 +471,7 @@
           ⚪ Normaler Stopp
         {% endif %}
   - condition: template
-    value_template: "{{ laufzeit_minuten | float < 10 }}"
+    value_template: "{{ laufzeit_minuten | float < 10 and start_defrost not in ['Abtauung', 'Defrost', '2'] }}"
   - action: notify.persistent_notification
     data:
       title: "⚠️ WP Kurzzyklus erkannt"

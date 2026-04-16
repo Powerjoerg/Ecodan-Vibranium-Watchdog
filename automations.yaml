@@ -255,11 +255,11 @@
   mode: single
 
 # ==========================================
-# WP THERMOSTAT STEUERUNG (LADEWÄCHTER 40/50/60)
+# WP THERMOSTAT STEUERUNG (LADEWÄCHTER 40/50/60) - FINAL FIX
 # ==========================================
 - id: wp_thermostat_heizbedarf_an
   alias: WP Thermostat - Ladung AN (< 40°C)
-  description: Shelly ON wenn Speicher unter 40°C fällt
+  description: Shelly ON & Modbus-Ladung (50°C) wenn Speicher leer wird
   triggers:
   - entity_id: sensor.wp_ladewaechter
     to: 'True'
@@ -270,11 +270,22 @@
   - target:
       entity_id: switch.wp_thermostat_in_1
     action: switch.turn_on
+  - action: modbus.write_register
+    data:
+      hub: mitsubishi-a1m
+      slave: 1
+      address: 31
+      value: 5000
+  - target:
+      entity_id: input_number.wp_soll_temperatur
+    data:
+      value: 50
+    action: input_number.set_value
   mode: single
 
 - id: wp_thermostat_heizbedarf_aus
   alias: WP Thermostat - Ladung AUS (> 50/60°C)
-  description: Shelly OFF wenn Zieltemperatur erreicht
+  description: Shelly OFF & Modbus-Zwangsschlaf (30°C) wenn Ziel erreicht
   triggers:
   - entity_id: sensor.wp_ladewaechter
     to: 'False'
@@ -285,6 +296,17 @@
   - target:
       entity_id: switch.wp_thermostat_in_1
     action: switch.turn_off
+  - action: modbus.write_register
+    data:
+      hub: mitsubishi-a1m
+      slave: 1
+      address: 31
+      value: 3000
+  - target:
+      entity_id: input_number.wp_soll_temperatur
+    data:
+      value: 30
+    action: input_number.set_value
   mode: single
 
 # ==========================================

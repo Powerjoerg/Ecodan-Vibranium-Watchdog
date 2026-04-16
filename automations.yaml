@@ -1,6 +1,7 @@
 # ==========================================
 # CHANGELOG
 # v2.1: Modbus Register 31 korrigiert & Shelly Abschaltung gefixt
+# v2.2: Modbus Zwangsschlaf in Ladewächter & Abtau-Fix für Diagnose integriert
 # ==========================================
 
 # ==========================================

@@ -120,23 +120,24 @@
     after: '07:00:00'
     before: '20:00:00'
   actions:
-  - target:
-      entity_id: input_boolean.wp_boost_aktiv
-    action: input_boolean.turn_on
   - action: modbus.write_register
     data:
       hub: mitsubishi-a1m
       slave: 1
-      address: 31
+      address: 30
       value: 6000
   - target:
       entity_id: input_number.wp_soll_temperatur
     data:
       value: 60
     action: input_number.set_value
+  - delay: "00:00:03"
   - target:
       entity_id: switch.wp_thermostat_in_1
     action: switch.turn_on
+  - target:
+      entity_id: input_boolean.wp_boost_aktiv
+    action: input_boolean.turn_on
   - action: notify.persistent_notification
     data:
       title: WP Boost gestartet
@@ -174,11 +175,15 @@
     entity_id: input_boolean.wp_boost_aktiv
     state: 'on'
   actions:
+  - target:
+      entity_id: switch.wp_thermostat_in_1
+    action: switch.turn_off
+  - delay: "00:00:03"
   - action: modbus.write_register
     data:
       hub: mitsubishi-a1m
       slave: 1
-      address: 31
+      address: 30
       value: 5000
   - target:
       entity_id: input_number.wp_soll_temperatur
@@ -188,9 +193,6 @@
   - target:
       entity_id: input_boolean.wp_boost_aktiv
     action: input_boolean.turn_off
-  - target:
-      entity_id: switch.wp_thermostat_in_1
-    action: switch.turn_off
   - action: notify.persistent_notification
     data:
       title: WP Boost beendet
@@ -268,20 +270,21 @@
       minutes: 1
     trigger: state
   actions:
-  - target:
-      entity_id: switch.wp_thermostat_in_1
-    action: switch.turn_on
   - action: modbus.write_register
     data:
       hub: mitsubishi-a1m
       slave: 1
-      address: 31
+      address: 30
       value: 5000
   - target:
       entity_id: input_number.wp_soll_temperatur
     data:
       value: 50
     action: input_number.set_value
+  - delay: "00:00:03"
+  - target:
+      entity_id: switch.wp_thermostat_in_1
+    action: switch.turn_on
   mode: single
 
 - id: wp_thermostat_heizbedarf_aus
@@ -297,16 +300,17 @@
   - target:
       entity_id: switch.wp_thermostat_in_1
     action: switch.turn_off
+  - delay: "00:00:03"
   - action: modbus.write_register
     data:
       hub: mitsubishi-a1m
       slave: 1
-      address: 31
-      value: 3000
+      address: 30
+      value: 4000
   - target:
       entity_id: input_number.wp_soll_temperatur
     data:
-      value: 30
+      value: 40
     action: input_number.set_value
   mode: single
 
@@ -321,49 +325,49 @@
   actions:
   - action: climate.set_temperature
     data:
-      temperature: "{{ state_attr('climate.st1820_xxxxxxxxxxxx', 'temperature') | float - 3 }}"
+      temperature: 19
     target:
       entity_id: climate.st1820_xxxxxxxxxxxx
   - delay: "00:15:00"
   - action: climate.set_temperature
     data:
-      temperature: "{{ state_attr('climate.st1820_xxxxxxxxxxxx', 'temperature') | float - 3 }}"
+      temperature: 19
     target:
       entity_id: climate.st1820_xxxxxxxxxxxx
   - delay: "00:15:00"
   - action: climate.set_temperature
     data:
-      temperature: "{{ state_attr('climate.st1820_xxxxxxxxxxxx', 'temperature') | float - 3 }}"
+      temperature: 19
     target:
       entity_id: climate.st1820_xxxxxxxxxxxx
   - delay: "00:15:00"
   - action: climate.set_temperature
     data:
-      temperature: "{{ state_attr('climate.st1820_xxxxxxxxxxxx', 'temperature') | float - 3 }}"
+      temperature: 19
     target:
       entity_id: climate.st1820_xxxxxxxxxxxx
   - delay: "00:15:00"
   - action: climate.set_temperature
     data:
-      temperature: "{{ state_attr('climate.st1820_xxxxxxxxxxxx', 'temperature') | float - 3 }}"
+      temperature: 19
     target:
       entity_id: climate.st1820_xxxxxxxxxxxx
   - delay: "00:15:00"
   - action: climate.set_temperature
     data:
-      temperature: "{{ state_attr('climate.st1820_xxxxxxxxxxxx', 'temperature') | float - 3 }}"
+      temperature: 19
     target:
       entity_id: climate.st1820_xxxxxxxxxxxx
   - delay: "00:15:00"
   - action: climate.set_temperature
     data:
-      temperature: "{{ state_attr('climate.t_kuche_eg', 'temperature') | float - 3 }}"
+      temperature: 19
     target:
       entity_id: climate.t_kuche_eg
   - delay: "00:15:00"
   - action: climate.set_temperature
     data:
-      temperature: "{{ state_attr('climate.thermostat_buro', 'temperature') | float - 3 }}"
+      temperature: 19
     target:
       entity_id: climate.thermostat_buro
   mode: single
@@ -376,49 +380,49 @@
   actions:
   - action: climate.set_temperature
     data:
-      temperature: "{{ state_attr('climate.st1820_xxxxxxxxxxxx', 'temperature') | float + 3 }}"
+      temperature: 22
     target:
       entity_id: climate.st1820_xxxxxxxxxxxx
   - delay: "00:15:00"
   - action: climate.set_temperature
     data:
-      temperature: "{{ state_attr('climate.st1820_xxxxxxxxxxxx', 'temperature') | float + 3 }}"
+      temperature: 22
     target:
       entity_id: climate.st1820_xxxxxxxxxxxx
   - delay: "00:15:00"
   - action: climate.set_temperature
     data:
-      temperature: "{{ state_attr('climate.st1820_xxxxxxxxxxxx', 'temperature') | float + 3 }}"
+      temperature: 22
     target:
       entity_id: climate.st1820_xxxxxxxxxxxx
   - delay: "00:15:00"
   - action: climate.set_temperature
     data:
-      temperature: "{{ state_attr('climate.st1820_xxxxxxxxxxxx', 'temperature') | float + 3 }}"
+      temperature: 22
     target:
       entity_id: climate.st1820_xxxxxxxxxxxx
   - delay: "00:15:00"
   - action: climate.set_temperature
     data:
-      temperature: "{{ state_attr('climate.st1820_xxxxxxxxxxxx', 'temperature') | float + 3 }}"
+      temperature: 22
     target:
       entity_id: climate.st1820_xxxxxxxxxxxx
   - delay: "00:15:00"
   - action: climate.set_temperature
     data:
-      temperature: "{{ state_attr('climate.st1820_xxxxxxxxxxxx', 'temperature') | float + 3 }}"
+      temperature: 22
     target:
       entity_id: climate.st1820_xxxxxxxxxxxx
   - delay: "00:15:00"
   - action: climate.set_temperature
     data:
-      temperature: "{{ state_attr('climate.t_kuche_eg', 'temperature') | float + 3 }}"
+      temperature: 22
     target:
       entity_id: climate.t_kuche_eg
   - delay: "00:15:00"
   - action: climate.set_temperature
     data:
-      temperature: "{{ state_attr('climate.thermostat_buro', 'temperature') | float + 3 }}"
+      temperature: 22
     target:
       entity_id: climate.thermostat_buro
   mode: single
@@ -484,3 +488,23 @@
   - action: counter.increment
     target:
       entity_id: counter.wp_kurzzyklen_heute
+
+# ==========================================
+# WP FEHLERCODE / DIAGNOSE
+# ==========================================
+- id: wp_fehlercode_benachrichtigung
+  alias: WP Diagnose - Fehlercode erkannt
+  description: Sendet eine Warnung, falls der Modbus-Gateway einen Fehlercode > 0 liefert (z.B. 6999 Komm.abbruch)
+  triggers:
+  - entity_id: sensor.mitsubishi_wp_fehlercode_gateway_raw
+    above: 0
+    trigger: numeric_state
+  conditions: []
+  actions:
+  - action: notify.persistent_notification
+    data:
+      title: "⚠️ WP Modbus Fehlercode"
+      message: >
+        Der Mitsubishi A1M-Gateway meldet den Fehlercode: {{ states('sensor.mitsubishi_wp_fehlercode_gateway_raw') }}
+        (6999 = Kommunikationsverlust zum FTC6 Mainboard)
+  mode: single

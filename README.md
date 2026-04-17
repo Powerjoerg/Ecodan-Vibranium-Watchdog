@@ -311,11 +311,14 @@ Die Hysterese bestimmt, wie weit die Temperatur fallen darf, bevor die WP wieder
 * **Verdichter-Stillstandszeit (Mindestpause):** Auf z. B. `10 Min` bis `20 Min` erhöhen.
 * *Hintergrund:* Ein sofortiges Wiederanspringen nach dem Abschalten (z. B. durch kleine Temperatur-Schwankungen) wird physikalisch von der FTC6-Steuerung blockiert. Das schont den Verdichter enorm.
 
-### 4. Einsatzgrenzen (AT-Bivalenzpunkt / Heizgrenze)
-* **Heizgrenztemperatur (Sommerabschaltung):** z. B. bei `+15°C` Außentemperatur.
-* *Hintergrund:* Bei übertrieben milden Temperaturen draußen kann die WP ihre Minimalleistung ohnehin nicht mehr richtig ans Heizwasser abgeben und taktet zwingend. Ab dieser Außentemperatur wird der Heizbetrieb daher komplett gesperrt und die WP macht nur noch Warmwasser.
+### 4. Einsatzgrenzen (AT-Bivalenzpunkt / Sommerabschaltung)
+* **Umschaltung Sommerbetrieb:** Zwingend auf `Außentemperatur` (o.ä.) stellen, **nicht** auf `Keine`! Steht der Wert auf `Keine`, ist die Sommerabschaltung komplett deaktiviert und die wp-interne Heizkurve versucht das ganze Jahr stur zu heizen.
+* **Außentemperatur Heizen EIN:** z. B. `11°C` bis `14°C`.
+* **Außentemperatur Heizen AUS:** z. B. `13°C` bis `15°C`.
+* **Dämpfungszeit Außentemp.:** auf z.B. `6h` (Standard) belassen. Verhindert, dass die WP bei kurzen sonnigen Abschnitten sofort springt, sondern immer den gleitenden Durchschnitt nutzt.
+* *Hintergrund:* Bei milden Außentemperaturen im Frühling/Herbst (z.B. 19°C) und plötzlicher Sonneneinstrahlung schließen intelligente Einzelraumregler (ERR) oft die Kreise. Ist die Sommerabschaltung an der FTC6 deaktiviert (`Keine`), pumpt die WP autonom voll gegen diese geschlossenen Kreise. Die Folge: Spreizung 0.0°C, 2-Minuten-Kurzzyklus (Hydraulischer Kurzschluss) und extremer Verschleiß! Die korrekte Anpassung der Sommerabschaltung ist der wichtigste Hebel gegen das Takten im milden Frühjahr.
 
-> **Achtung:** Die ganz exakten Werte können je nach Gebäudedämmung und Flächenheizung leicht variieren. Diese Optionen (Vorrang, Hysterese, Sperrzeiten, Einsatzgrenzen) haben sich aber als die entscheidenden Hebel im FTC6-Menü erwiesen, um die Start-Zyklen der Ecodan signifikant in den Griff zu bekommen!
+> **Achtung:** Die ganz exakten Werte können je nach Gebäudedämmung und Flächenheizung leicht variieren. Diese Optionen (Vorrang, Hysterese, Sperrzeiten, Sommerabschaltung) haben sich aber als die entscheidenden Hebel im FTC6-Menü erwiesen, um die Start-Zyklen der Ecodan signifikant in den Griff zu bekommen!
 
 ---
 

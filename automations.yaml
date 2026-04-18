@@ -264,17 +264,35 @@
   mode: single
 
 # ==========================================
+# WP WATCHDOG (HYBRID SPS - WAKE REGISTRY)
+# ==========================================
+- id: wp_set_dirty_flag
+  alias: WP Diagnose - Set Control Dirty Flag
+  description: Stufe 1 der Hybrid SPS - Fängt Events isoliert ab und triggert den Watchdog zielgerichtet.
+  mode: queued
+  max: 5
+  triggers:
+  - entity_id: input_boolean.wp_boost_aktiv
+    trigger: state
+  - entity_id: sensor.wp_ladewaechter
+    trigger: state
+  actions:
+  - event: wp_control_dirty_flag
+
+# ==========================================
 # WP WATCHDOG (ZENTRALE STATE MACHINE - THE BRAIN)
 # ==========================================
 - id: wp_thermostat_watchdog
   alias: WP Thermostat & Modbus - Watchdog State Machine
-  description: Berechnet das gültige Ziel nach harter Priorität und ist DIE EINZIGE Modbus-Schreibinstanz!
+  description: Berechnet das gültige Ziel nach harter Priorität (10 min Polling + Dirty Flag Wake)
   mode: single
   triggers:
   - trigger: homeassistant
     event: start
   - trigger: time_pattern
     minutes: "/10"
+  - trigger: event
+    event_type: wp_control_dirty_flag
   conditions: []
   actions:
   # --- 1. Ziel berechnen ---

@@ -250,21 +250,16 @@ views:
                 icon: mdi:calendar
                 icon_color: teal
           - type: grid
-            columns: 3
+            columns: 2
             square: false
             cards:
               - type: custom:mushroom-template-card
                 entity: counter.wp_starts_heute
                 primary: Taktung
-                multiline_secondary: true
                 secondary: |-
                   {% set starts = states('counter.wp_starts_heute') | int(0) %}
                   {% set lz = states('sensor.wp_laufzeit_pro_zyklus') | float(0) %}
                   {{ starts }} Starts (Ø {{ lz | round(0) }} min)
-                  {% set abtau = states('counter.wp_abtauzyklen_heute') | int(0) %}
-                  {% if abtau > 0 %}
-                    ❄️ {{ abtau }} Abtau-Zyklen
-                  {% endif %}
                 icon: mdi:restart
                 icon_color: |-
                   {% set starts = states('counter.wp_starts_heute') | int(0) %}
@@ -290,6 +285,26 @@ views:
                     orange
                   {% elif 'Kritisch' in bew %}
                     red
+                  {% else %}
+                    grey
+                  {% endif %}
+              - type: custom:mushroom-template-card
+                entity: counter.wp_abtauzyklen_heute
+                primary: Abtau-Zyklen
+                secondary: |-
+                  {% set abtau = states(entity) | int(0) %}
+                  {% if abtau == 0 %}
+                    Heute noch nicht abgetaut
+                  {% elif abtau == 1 %}
+                    Heute 1 mal abgetaut
+                  {% else %}
+                    Heute {{ abtau }} mal abgetaut
+                  {% endif %}
+                icon: mdi:snowflake-melt
+                icon_color: |-
+                  {% set abtau = states(entity) | int(0) %}
+                  {% if abtau > 0 %}
+                    blue
                   {% else %}
                     grey
                   {% endif %}

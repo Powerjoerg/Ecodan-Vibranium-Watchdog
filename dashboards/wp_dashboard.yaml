@@ -315,7 +315,7 @@ views:
                   {% if is_state('input_boolean.wp_boost_aktiv', 'on') %}
                     🔥 Aktiv — 60°C
                   {% else %}
-                    Inaktiv — 50°C
+                    Inaktiv — {{ states('input_number.wp_soll_temperatur') }}°C
                   {% endif %}
                 icon: mdi:solar-power-variant
                 icon_color: |-

@@ -104,6 +104,9 @@
     for:
       minutes: 5
     trigger: numeric_state
+  - entity_id: sensor.mitsubishi_wp_isttemperatur_wasserspeicher_tww
+    below: 45
+    trigger: numeric_state
   conditions:
   - condition: numeric_state
     entity_id: sensor.feed_in
@@ -113,7 +116,7 @@
     above: 50
   - condition: numeric_state
     entity_id: sensor.mitsubishi_wp_isttemperatur_wasserspeicher_tww
-    below: 59
+    below: 45
   - condition: state
     entity_id: input_boolean.wp_boost_aktiv
     state: 'off'

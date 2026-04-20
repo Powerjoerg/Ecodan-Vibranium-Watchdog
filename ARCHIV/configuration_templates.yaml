@@ -8,6 +8,25 @@
 
 template:
   - sensor:
+      # ─── Modbus Rückkanal Diagnose ─────────────────────────
+      - name: "WP Regelabweichung"
+        state: >
+          {% set soll = states('input_number.wp_soll_temperatur') | float(0) %}
+          {% set echo = states('sensor.mitsubishi_wp_solltemperatur_wasserspeicher_tww') | float(0) %}
+          {{ (echo - soll) | round(1) }}
+        unit_of_measurement: "K"
+
+      - name: "WP Rueckkanal Status"
+        state: >
+          {% set abweichung = states('sensor.wp_regelabweichung') | float(0) | abs %}
+          {% if abweichung == 0 %}
+            🟢 Synchron
+          {% elif abweichung <= 2 %}
+            🟡 Leichte Abweichung
+          {% else %}
+            🔴 Drift / asynchron
+          {% endif %}
+
       # ─── Ladewaechter (mit Hysterese) ───────────────────────
       - name: "wp_ladewaechter"
         state: >
@@ -32,12 +51,13 @@ template:
           {{ states('sensor.shellypro3em_xxxxxxxxxxxx_phase_a_leistung') | float(0) * 3 }}
 
       # Phase B = Heizstab (3-phasig, 1 Phase gemessen × 3)
+      # OPTIMIERT: Unterdrückt induktive Scheinleistung/Standby unter 50W
       - name: "WP Heizstab Gesamt"
         unit_of_measurement: "W"
         device_class: power
         state_class: measurement
         state: >
-          {{ states('sensor.shellypro3em_xxxxxxxxxxxx_phase_b_leistung') | float(0) * 3 }}
+          {{ states('sensor.shellypro3em_e08cfe95cbe0_phase_b_leistung') | float(0) * 3 }}
 
       # Phase C = Innenmodul (1-phasig, direkt)
       - name: "WP Innen Gesamt"

@@ -1,0 +1,137 @@
+# ==========================================
+# WP URLAUBSSCHALTER (Saison-intelligent + Rückkehr)
+# Ecodan A1M Modbus
+# ==========================================
+
+input_select:
+  wp_urlaubsmodus:
+    name: "Urlaubsmodus"
+    icon: mdi:airplane
+    options:
+      - "Normalbetrieb"
+      - "Sommer-Urlaub (WP AUS)"
+      - "Winter-Urlaub (Minimal 45°C)"
+    initial: "Normalbetrieb"
+
+input_datetime:
+  wp_urlaub_rueckkehr:
+    name: "Rückkehrdatum"
+    has_date: true
+    has_time: false
+    icon: mdi:calendar-end
+
+# Optionaler Sensor für dein Dashboard zur Übersicht
+template:
+  - sensor:
+      - name: "WP Urlaub Status"
+        unique_id: wp_urlaub_status
+        state: >
+          {% set modus = states('input_select.wp_urlaubsmodus') %}
+          {% set rueckkehr = states('input_datetime.wp_urlaub_rueckkehr') %}
+          {% if modus == 'Normalbetrieb' %}
+            ✅ Zuhause
+          {% else %}
+            ✈️ {{ modus }} — Rückkehr: {{ rueckkehr.split(' ')[0] }}
+          {% endif %}
+
+automation:
+  # ----------------------------------------------------
+  # Automation 1: Führt die ausgewählte Aktion aus
+  # ----------------------------------------------------
+  - id: wp_urlaubsmodus_wechsel
+    alias: "WP - Urlaubsmodus Ändern"
+    trigger:
+      - platform: state
+        entity_id: input_select.wp_urlaubsmodus
+    action:
+      - choose:
+          # === SOMMER: Komplett aus ===
+          - conditions:
+              - condition: state
+                entity_id: input_select.wp_urlaubsmodus
+                state: "Sommer-Urlaub (WP AUS)"
+            sequence:
+              - action: modbus.write_register
+                data:
+                  hub: mitsubishi-a1m
+                  unit: 1
+                  address: 26
+                  value: 0
+              - action: notify.persistent_notification
+                data:
+                  title: "🏖️ Sommer-Urlaub aktiv"
+                  message: "Wärmepumpe ist komplett AUSGESSCHALTET (Achtung: Kein Frostschutz!)."
+
+          # === WINTER: Frostschutz & Minimal ===
+          - conditions:
+              - condition: state
+                entity_id: input_select.wp_urlaubsmodus
+                state: "Winter-Urlaub (Minimal 45°C)"
+            sequence:
+              - action: modbus.write_register
+                data:
+                  hub: mitsubishi-a1m
+                  unit: 1
+                  address: 26
+                  value: 2
+              - action: input_number.set_value
+                target:
+                  entity_id: input_number.wp_soll_temperatur
+                data:
+                  value: 45
+              - action: notify.persistent_notification
+                data:
+                  title: "❄️ Winter-Urlaub aktiv"
+                  message: "WP läuft auf Minimum (45°C Puffer). Haus kühlt nicht völlig aus."
+
+          # === NORMALBETRIEB ===
+          - conditions:
+              - condition: state
+                entity_id: input_select.wp_urlaubsmodus
+                state: "Normalbetrieb"
+            sequence:
+              - action: modbus.write_register
+                data:
+                  hub: mitsubishi-a1m
+                  unit: 1
+                  address: 26
+                  value: 2
+              - action: input_number.set_value
+                target:
+                  entity_id: input_number.wp_soll_temperatur
+                data:
+                  value: 50
+              - action: notify.persistent_notification
+                data:
+                  title: "🏠 Normalbetrieb hergestellt"
+                  message: "Wärmepumpe heizt wieder normal (50°C Soll)."
+
+  # ----------------------------------------------------
+  # Automation 2: Rückkehr-Kalender-Check
+  # ----------------------------------------------------
+  - id: wp_urlaub_rueckkehr_automatik
+    alias: "WP - Urlaub Rückkehrvorbereitung 24h"
+    description: "Schaltet 24 Stunden vor Rückkehr wieder auf Normalbetrieb"
+    trigger:
+      - platform: time
+        at: "12:00:00"
+    condition:
+      - condition: template
+        value_template: "{{ states('input_select.wp_urlaubsmodus') != 'Normalbetrieb' }}"
+        
+      - condition: template
+        value_template: >
+          {% set rueckkehr = as_datetime(states('input_datetime.wp_urlaub_rueckkehr')).date() %}
+          {% set morgen = (now() + timedelta(days=1)).date() %}
+          {{ rueckkehr == morgen }}
+          
+    action:
+      - action: input_select.select_option
+        target:
+          entity_id: input_select.wp_urlaubsmodus
+        data:
+          option: "Normalbetrieb"
+      - action: notify.persistent_notification
+        data:
+          title: "⏰ Willkommen zurück (Morgen)!"
+          message: "Das Haus wird nun vorgeheizt. Der Urlaubsmodus wurde automatisch beendet."

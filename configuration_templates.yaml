@@ -16,7 +16,7 @@ template:
           {% set current_state = states('sensor.wp_ladewaechter') %}
           {% if temp < 40 %}
             True
-          {% elif temp >= target %}
+          {% elif temp >= (target - 0.8) %}
             False
           {% else %}
             {{ current_state | default('False') }}
@@ -75,7 +75,6 @@ template:
 
       # ─── COP Momentan (behält letzten Wert) ────────────────
       - name: "WP COP"
-        unit_of_measurement: ""
         state: >
           {% set flow = states('sensor.mitsubishi_wp_durchflussmenge') | float(0) %}
           {% set vl = states('sensor.mitsubishi_wp_vorlauftemperatur') | float(0) %}
@@ -89,7 +88,6 @@ template:
 
       # ─── COP Heute (Tageswert) ─────────────────────────────
       - name: "WP COP Heute"
-        unit_of_measurement: ""
         state: >
           {% set waerme = states('sensor.wp_waerme_heute') | float(0) %}
           {% set strom = states('sensor.wp_verbrauch_heute') | float(0) %}

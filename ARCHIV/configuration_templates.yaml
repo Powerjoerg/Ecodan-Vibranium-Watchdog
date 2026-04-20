@@ -51,12 +51,14 @@ template:
           {{ states('sensor.shellypro3em_xxxxxxxxxxxx_phase_a_leistung') | float(0) * 3 }}
 
       # Phase B = Heizstab (3-phasig, 1 Phase gemessen × 3)
+      # OPTIMIERT: Unterdrückt induktive Scheinleistung/Standby unter 50W
       - name: "WP Heizstab Gesamt"
         unit_of_measurement: "W"
         device_class: power
         state_class: measurement
         state: >
-          {{ states('sensor.shellypro3em_xxxxxxxxxxxx_phase_b_leistung') | float(0) * 3 }}
+          {% set power = states('sensor.shellypro3em_xxxxxxxxxxxx_phase_b_leistung') | float(0) * 3 %}
+          {{ power if power > 50 else 0 }}
 
       # Phase C = Innenmodul (1-phasig, direkt)
       - name: "WP Innen Gesamt"

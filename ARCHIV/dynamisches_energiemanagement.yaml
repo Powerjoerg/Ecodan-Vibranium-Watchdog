@@ -1,0 +1,157 @@
+# ==========================================
+# Dynamisches Energiemanagement
+# Struktur für kommende dynamische Tarife (ab 22.04.2026)
+# ==========================================
+
+input_number:
+  dummy_strompreis:
+    name: "Test: Strompreis"
+    min: 0
+    max: 50
+    step: 0.5
+    initial: 25
+    unit_of_measurement: "ct/kWh"
+    icon: mdi:cash
+    
+  dummy_solar_prognose:
+    name: "Test: Solar-Prognose"
+    min: 0
+    max: 100
+    step: 1
+    initial: 30
+    unit_of_measurement: "kWh"
+    icon: mdi:solar-power
+
+template:
+  - sensor:
+      # === Strompreis Anker-Sensor ===
+      - name: "Aktueller Strompreis"
+        unique_id: aktueller_strompreis
+        unit_of_measurement: "ct/kWh"
+        device_class: monetary
+        state_class: measurement
+        icon: mdi:currency-eur
+        state: >
+          {# Ab 22.04. Tibber-Integration: sensor.electricity_price_your_home #}
+          {% set echt_preis = states('sensor.electricity_price_your_home') %}
+          {% if echt_preis not in ['unavailable', 'unknown', 'none'] %}
+            {{ (echt_preis | float(0)) * 100 }}
+          {% else %}
+            {{ states('input_number.dummy_strompreis') | float(25) }}
+          {% endif %}
+      
+      # === Solar-Prognose Anker-Sensor ===
+      - name: "Solar Prognose Heute"
+        unique_id: solar_prognose_heute
+        unit_of_measurement: "kWh"
+        device_class: energy
+        state_class: total
+        icon: mdi:solar-power
+        state: >
+          {# Ab 22.04. Forecast.Solar: sensor.energy_production_today #}
+          {% set echt_forecast = states('sensor.energy_production_today') %}
+          {% if echt_forecast not in ['unavailable', 'unknown', 'none'] %}
+            {{ echt_forecast | float(0) }}
+          {% else %}
+            {{ states('input_number.dummy_solar_prognose') | float(30) }}
+          {% endif %}
+
+      # === NEU: WP Strategie ===
+      - name: "WP Strategie"
+        unique_id: wp_strategie
+        state: >
+          {% set preis_jetzt = states('sensor.aktueller_strompreis') | float(25) %}
+          {% set preis_min_heute = states('input_number.dummy_strompreis') | float(25) * 0.8 %}
+          {% set solar_heute = states('sensor.solar_prognose_heute') | float(30) %}
+          {% set solar_morgen = states('input_number.dummy_solar_prognose') | float(30) %}
+          {% set aktuelle_stunde = now().hour %}
+          
+          {% if (preis_jetzt - preis_min_heute) < 2 %}
+            "BILLIGSTE_STUNDE_JETZT"
+          {% elif solar_morgen > 40 and aktuelle_stunde >= 18 %}
+            "SPAREN_FUER_MORGEN"
+          {% elif solar_heute > 20 and aktuelle_stunde < 10 %}
+            "SPAREN_FUER_MITTAG"
+          {% else %}
+            "NORMAL"
+          {% endif %}
+
+      # === NEU: Berechneter dynamischer Puffer Sollwert ===
+      - name: "WP Puffer Soll Dynamisch"
+        unique_id: wp_puffer_soll_dynamisch
+        unit_of_measurement: "°C"
+        device_class: temperature
+        state: >
+          {% set strategie = states('sensor.wp_strategie') %}
+          {% set preis = states('sensor.aktueller_strompreis') | float(25) %}
+          
+          {% set pv_power = states('sensor.pv_power') | float(0) * 1000 %}
+          {% set load_power = states('sensor.load_power') | float(0) * 1000 %}
+          {% set pv_ueberschuss = pv_power - load_power %}
+          
+          {% set puffer_ist = states('sensor.mitsubishi_wp_isttemperatur_wasserspeicher_tww') | float(45) %}
+          
+          {% set ziel = 48 %} {# Normalbetrieb #}
+
+          {# 1. Komfort-Sicherung (unter 40 geht er nie!) #}
+          {% if puffer_ist < 40 %}
+            {% set ziel = 50 %}
+            
+          {# 2. Harter PV-Überschuss > 3000 Watt #}
+          {% elif pv_ueberschuss > 3000 %}
+            {% set ziel = 60 %}
+            
+          {# 3. Strategie: Nächsten Tag abwarten (Sonne kommt) #}
+          {% elif strategie in ["SPAREN_FUER_MORGEN", "SPAREN_FUER_MITTAG"] %}
+            {% set ziel = 42 %}
+            
+          {# 4. Preisabhängige Staffelung #}
+          {% elif strategie == "BILLIGSTE_STUNDE_JETZT" or preis < 10 %}
+            {% set ziel = 60 %}
+          {% elif preis < 15 %}
+            {% set ziel = 55 %}
+          {% elif preis < 20 %}
+            {% set ziel = 50 %}
+          {% elif preis < 28 %}
+            {% set ziel = 48 %}
+          {% else %}
+            {% set ziel = 40 %} {# Zwangsschlaf #}
+          {% endif %}
+
+          {{ ziel }}
+
+automation:
+  # ==========================================
+  # DYNAMISCHER SOLLWERT (TESTBETRIEB)
+  # ==========================================
+  - id: wp_soll_dynamisch_anpassen_test
+    alias: "TEST: WP - Dynamische Soll-Temperatur"
+    description: "Signalisiert Soll-Anpassung, schreibt aber noch NICHT auf den Modbus"
+    trigger:
+      - platform: state
+        entity_id: sensor.wp_puffer_soll_dynamisch
+      - platform: time_pattern
+        minutes: "/15"
+    condition:
+      - condition: template
+        value_template: "{{ states('sensor.mitsubishi_wp_fehlercode_gateway_raw') not in ['unavailable', 'unknown'] }}"
+      
+      - condition: template
+        value_template: "{{ states('input_number.wp_soll_temperatur') | float(50) != 40 }}"
+        
+      # Optional Bonus: Puffer Sensor gültig
+      - condition: template
+        value_template: "{{ states('sensor.mitsubishi_wp_isttemperatur_wasserspeicher_tww') not in ['unavailable', 'unknown'] }}"
+
+    action:
+      - action: notify.persistent_notification
+        data:
+          title: "🤖 Puffer-Soll angepasst"
+          message: >
+            🎯 Strategie: {{ states('sensor.wp_strategie') }}
+            💰 Preis: {{ states('sensor.aktueller_strompreis') }} ct/kWh
+            ☀️ Purer PV-Überschuss: {{ ((states('sensor.pv_power') | float(0) * 1000) - (states('sensor.load_power') | float(0) * 1000)) | round(0) }} W
+            🌡️ Puffer Ist: {{ states('sensor.mitsubishi_wp_isttemperatur_wasserspeicher_tww') }}°C
+            🎯 NEUES PUFFER ZIEL: {{ states('sensor.wp_puffer_soll_dynamisch') }}°C
+            (Wäre der Modbus scharf, läge das Register 40 jetzt auf diesem Wert!)
+    mode: single

@@ -8,6 +8,11 @@ input_boolean:
   wp_boost_aktiv:
     name: "WP Boost Flag"
     icon: mdi:fire
+    
+  wp_boost_freigabe:
+    name: "PV-Boost Automatik"
+    icon: mdi:solar-power
+    initial: true
 
 input_number:
   dummy_strompreis:
@@ -853,10 +858,9 @@ automation:
       action: counter.decrement
     mode: single
 
-  - id: wp_pv_boost_master
-    alias: "WP PV Boost - Single State Master"
-    description: "Vereinigt Start/Stopp Logik, verhindert Race Conditions. Prio 1 = Abbruch!"
-    mode: single
+  - id: wp_boost_aktivieren
+    alias: WP Boost bei PV-Überschuss aktivieren
+    description: Setzt Boost Flag auf ON (Watchdog übernimmt den Modbus Befehl)
     triggers:
     # 1. State Triggers (Jeder Wechsel in Helfern feuert)
     - platform: state
@@ -870,75 +874,68 @@ automation:
       entity_id: binary_sensor.wp_boost_ziel_erreicht
       to: 'on'
     - entity_id: sensor.mitsubishi_wp_isttemperatur_wasserspeicher_tww
-      below: 54.0
+      below: 54
       trigger: numeric_state
+    conditions:
+    - condition: numeric_state
+      entity_id: sensor.feed_in
+      above: 1200
+    - condition: numeric_state
+      entity_id: sensor.battery_soc_1
+      above: 50
+    - condition: numeric_state
+      entity_id: sensor.mitsubishi_wp_isttemperatur_wasserspeicher_tww
+      below: 54
+    - condition: state
+      entity_id: input_boolean.wp_boost_aktiv
+      state: 'off'
+    - condition: time
+      after: '07:00:00'
+      before: '20:00:00'
+    actions:
+    - target:
+        entity_id: input_boolean.wp_boost_aktiv
+      action: input_boolean.turn_on
+    - action: notify.persistent_notification
+      data:
+        title: WP Boost angefordert ☀️
+        message: "PV-Überschuss erkannt. Watchdog delegiert 55°C Ladung."
+    mode: single
+
+  - id: wp_boost_beenden
+    alias: WP Boost beenden
+    description: Setzt Boost Flag auf OFF (Watchdog schickt WP in Zwangsschlaf)
+    triggers:
     - at: '21:00:00'
       trigger: time
-    # 3. Reload Heiler (Heilt verpasstes Crossing)
-    - platform: homeassistant
-      event: start
-    - platform: event
-      event_type: automation_reloaded
+    - entity_id: sensor.battery_soc_1
+      below: 70
+      for:
+        minutes: 5
+      trigger: numeric_state
+    - entity_id: sensor.mitsubishi_wp_isttemperatur_wasserspeicher_tww
+      above: 55.0
+      for:
+        minutes: 1
+      trigger: numeric_state
+    - entity_id: sensor.pv_power
+      below: 1.0
+      for:
+        minutes: 30
+      trigger: numeric_state
+    conditions:
+    - condition: state
+      entity_id: input_boolean.wp_boost_aktiv
+      state: 'on'
     actions:
-    - choose:
-      # ==================================
-      # PRIO 1: BOOST ABBRUCH (Safety First)
-      # ==================================
-      - conditions:
-        - condition: state
-          entity_id: input_boolean.wp_boost_aktiv
-          state: 'on'
-        # Sobald EINER der Abbruchgründe zutrifft -> AUS!
-        - condition: or
-          conditions:
-          - condition: time
-            after: '20:59:59'
-          - condition: state
-            entity_id: binary_sensor.wp_boost_abbruch_batterie
-            state: 'on'
-          - condition: state
-            entity_id: binary_sensor.wp_boost_abbruch_pv
-            state: 'on'
-          - condition: state
-            entity_id: binary_sensor.wp_boost_ziel_erreicht
-            state: 'on'
-        sequence:
-        - target:
-            entity_id: input_boolean.wp_boost_aktiv
-          action: input_boolean.turn_off
-        - action: notify.persistent_notification
-          data:
-            title: WP Boost beendet 🌙
-            message: "PV-Boost Flag entfernt. Hardware-Schutz hat gegriffen."
-
-      # ==================================
-      # PRIO 2: BOOST START
-      # ==================================
-      - conditions:
-        - condition: state
-          entity_id: input_boolean.wp_boost_aktiv
-          state: 'off'
-        - condition: state
-          entity_id: binary_sensor.wp_pv_boost_freigabe
-          state: 'on'
-        - condition: numeric_state
-          entity_id: sensor.mitsubishi_wp_isttemperatur_wasserspeicher_tww
-          below: 54.0
-        - condition: time
-          after: '07:00:00'
-          before: '20:00:00'
-        # WICHTIG: Race-Condition Schutz! Er macht es nur an, wenn NICHT GLEICHZEITIG ein Abbruch vorliegt (z.B. Akku gerade auf 60%)
-        - condition: state
-          entity_id: binary_sensor.wp_boost_abbruch_batterie
-          state: 'off'
-        sequence:
-        - target:
-            entity_id: input_boolean.wp_boost_aktiv
-          action: input_boolean.turn_on
-        - action: notify.persistent_notification
-          data:
-            title: WP Boost angefordert ☀️
-            message: "PV-Überschuss erkannt. Master-Automation delegiert 55°C Ladung."
+    - target:
+        entity_id: input_boolean.wp_boost_aktiv
+      action: input_boolean.turn_off
+    - action: notify.persistent_notification
+      data:
+        title: WP Boost beendet 🌙
+        message: "PV-Boost Flag entfernt. Watchdog bewertet Zustand neu."
+    mode: single
 
   - id: zappi_smart_charge_solar
     alias: Zappi - Laden starten bei PV-Überschuss (Tags)

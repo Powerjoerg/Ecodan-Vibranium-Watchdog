@@ -95,4 +95,10 @@ Die Kernlogik eliminiert das Takten der WP. Die Automation `sensor.wp_ladewaecht
 - Fällt der Raspberry Pi (Home Assistant) komplett aus, greift Stufe 2 aus dem `NOTFALL_HANDBUCH.md` (DIP Switch SW2-1 auf OFF kippen), damit die Ecodan den Shelly ignoriert und autonom weiterläuft.
 
 ---
+
+### 3.6 Geplante Zappi-Erweiterung (Smart Meter Tibber-Laden)
+Sobald das physische Smart Meter installiert ist, wird die starre `01:00` Uhr Nachtladung der Zappi durch eine "Gleitende Preisbremse" in der YAML ersetzt.
+**Konzept:** Die Zappi wird so gekoppelt, dass sie nur dann auf `FAST` schaltet, wenn der `sensor.aktueller_strompreis` pauschal extrem günstig ist (z.B. < 18 ct/kWh) ODER der aktuelle Preis maximal 3 ct über dem absoluten Tagestief (`sensor.electricity_price_min_your_home`) liegt. Verlässt der Preis dieses Tal, fällt die Zappi automatisch wieder auf `ECO +` zurück.
+
+---
 *Lokal verifizierter Stand - Alle Entitäten entsprechen der YAML v2.5 config. *

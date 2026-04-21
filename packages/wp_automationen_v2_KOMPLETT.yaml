@@ -471,8 +471,10 @@ template:
             {% set soll = 45 %}
           {% elif states('input_boolean.wp_boost_aktiv') == 'on' %}
             {% set soll = 55 %}
+          {% elif states('sensor.wp_ladewaechter') == 'True' %}
+            {% set soll = 50 %}
           {% else %}
-            {% set soll = states('sensor.wp_puffer_soll_dynamisch') | float(48) %}
+            {% set soll = 40 %}
           {% endif %}
           {% set echo = states('sensor.mitsubishi_wp_solltemperatur_wasserspeicher_tww') | float(0) %}
           {{ (echo - soll) | round(1) }}
@@ -756,6 +758,39 @@ template:
           {% endfor %}
           {{ ns.needs_heat }}
 
+      # =========================================================
+      # ---> PANZER-HELFER FÜR PV BOOST (MIT DELAY_OFF NERVEN-SCHUTZ)
+      # =========================================================
+      - name: "WP PV Boost Freigabe"
+        unique_id: wp_pv_boost_freigabe
+        state: >
+          {{ states('sensor.feed_in') | float(0) > 1200 and states('sensor.battery_soc_1') | float(0) > 50 }}
+        delay_on: "00:05:00"
+        delay_off: "00:05:00"
+
+      - name: "WP Boost Abbruch PV"
+        unique_id: wp_boost_abbruch_pv
+        state: >
+          {{ states('sensor.pv_power') | float(10) < 1.0 }}
+        delay_on: "00:30:00"
+        delay_off: "00:05:00"
+
+      - name: "WP Boost Abbruch Batterie"
+        unique_id: wp_boost_abbruch_batterie
+        state: >
+          {{ states('sensor.battery_soc_1') | float(100) < 70 }}
+        delay_on: "00:05:00"
+        delay_off: "00:05:00"
+
+      - name: "WP Boost Ziel Erreicht"
+        unique_id: wp_boost_ziel_erreicht
+        state: >
+          {{ states('sensor.mitsubishi_wp_warmepumpe_frequenz') | float(100) < 5 
+             and states('sensor.mitsubishi_wp_abtaubetrieb_raw') not in ['2', '3', 'Abtauung', 'Defrost']
+             and states('sensor.mitsubishi_wp_isttemperatur_wasserspeicher_tww') | float(0) >= 50.0 }}
+        delay_on: "00:05:00"
+        delay_off: "00:02:00"
+
 sensor:
   - platform: history_stats
     name: "WP Laufzeit Heute"
@@ -818,83 +853,92 @@ automation:
       action: counter.decrement
     mode: single
 
-  - id: wp_boost_aktivieren
-    alias: WP Boost bei PV-Überschuss aktivieren
-    description: Setzt Boost Flag auf ON (Watchdog übernimmt den Modbus Befehl)
-    triggers:
-    - entity_id: sensor.feed_in
-      above: 1200
-      for:
-        minutes: 5
-      trigger: numeric_state
-    - entity_id: sensor.battery_soc_1
-      above: 50
-      for:
-        minutes: 5
-      trigger: numeric_state
-    - entity_id: sensor.mitsubishi_wp_isttemperatur_wasserspeicher_tww
-      below: 54
-      trigger: numeric_state
-    conditions:
-    - condition: numeric_state
-      entity_id: sensor.feed_in
-      above: 1200
-    - condition: numeric_state
-      entity_id: sensor.battery_soc_1
-      above: 50
-    - condition: numeric_state
-      entity_id: sensor.mitsubishi_wp_isttemperatur_wasserspeicher_tww
-      below: 54
-    - condition: state
-      entity_id: input_boolean.wp_boost_aktiv
-      state: 'off'
-    - condition: time
-      after: '07:00:00'
-      before: '20:00:00'
-    actions:
-    - target:
-        entity_id: input_boolean.wp_boost_aktiv
-      action: input_boolean.turn_on
-    - action: notify.persistent_notification
-      data:
-        title: WP Boost angefordert ☀️
-        message: "PV-Überschuss erkannt. Watchdog delegiert 55°C Ladung."
+  - id: wp_pv_boost_master
+    alias: "WP PV Boost - Single State Master"
+    description: "Vereinigt Start/Stopp Logik, verhindert Race Conditions. Prio 1 = Abbruch!"
     mode: single
-
-  - id: wp_boost_beenden
-    alias: WP Boost beenden
-    description: Setzt Boost Flag auf OFF (Watchdog schickt WP in Zwangsschlaf)
     triggers:
+    # 1. State Triggers (Jeder Wechsel in Helfern feuert)
+    - platform: state
+      entity_id: binary_sensor.wp_pv_boost_freigabe
+    - platform: state
+      entity_id: binary_sensor.wp_boost_abbruch_batterie
+    - platform: state
+      entity_id: binary_sensor.wp_boost_abbruch_pv
+    # 2. Hard-Limiter Triggers
+    - platform: state
+      entity_id: binary_sensor.wp_boost_ziel_erreicht
+      to: 'on'
+    - entity_id: sensor.mitsubishi_wp_isttemperatur_wasserspeicher_tww
+      below: 54.0
+      trigger: numeric_state
     - at: '21:00:00'
       trigger: time
-    - entity_id: sensor.battery_soc_1
-      below: 70
-      for:
-        minutes: 5
-      trigger: numeric_state
-    - entity_id: sensor.mitsubishi_wp_isttemperatur_wasserspeicher_tww
-      above: 55.0
-      for:
-        minutes: 1
-      trigger: numeric_state
-    - entity_id: sensor.pv_power
-      below: 1.0
-      for:
-        minutes: 30
-      trigger: numeric_state
-    conditions:
-    - condition: state
-      entity_id: input_boolean.wp_boost_aktiv
-      state: 'on'
+    # 3. Reload Heiler (Heilt verpasstes Crossing)
+    - platform: homeassistant
+      event: start
+    - platform: event
+      event_type: automation_reloaded
     actions:
-    - target:
-        entity_id: input_boolean.wp_boost_aktiv
-      action: input_boolean.turn_off
-    - action: notify.persistent_notification
-      data:
-        title: WP Boost beendet 🌙
-        message: "PV-Boost Flag entfernt. Watchdog bewertet Zustand neu."
-    mode: single
+    - choose:
+      # ==================================
+      # PRIO 1: BOOST ABBRUCH (Safety First)
+      # ==================================
+      - conditions:
+        - condition: state
+          entity_id: input_boolean.wp_boost_aktiv
+          state: 'on'
+        # Sobald EINER der Abbruchgründe zutrifft -> AUS!
+        - condition: or
+          conditions:
+          - condition: time
+            after: '20:59:59'
+          - condition: state
+            entity_id: binary_sensor.wp_boost_abbruch_batterie
+            state: 'on'
+          - condition: state
+            entity_id: binary_sensor.wp_boost_abbruch_pv
+            state: 'on'
+          - condition: state
+            entity_id: binary_sensor.wp_boost_ziel_erreicht
+            state: 'on'
+        sequence:
+        - target:
+            entity_id: input_boolean.wp_boost_aktiv
+          action: input_boolean.turn_off
+        - action: notify.persistent_notification
+          data:
+            title: WP Boost beendet 🌙
+            message: "PV-Boost Flag entfernt. Hardware-Schutz hat gegriffen."
+
+      # ==================================
+      # PRIO 2: BOOST START
+      # ==================================
+      - conditions:
+        - condition: state
+          entity_id: input_boolean.wp_boost_aktiv
+          state: 'off'
+        - condition: state
+          entity_id: binary_sensor.wp_pv_boost_freigabe
+          state: 'on'
+        - condition: numeric_state
+          entity_id: sensor.mitsubishi_wp_isttemperatur_wasserspeicher_tww
+          below: 54.0
+        - condition: time
+          after: '07:00:00'
+          before: '20:00:00'
+        # WICHTIG: Race-Condition Schutz! Er macht es nur an, wenn NICHT GLEICHZEITIG ein Abbruch vorliegt (z.B. Akku gerade auf 60%)
+        - condition: state
+          entity_id: binary_sensor.wp_boost_abbruch_batterie
+          state: 'off'
+        sequence:
+        - target:
+            entity_id: input_boolean.wp_boost_aktiv
+          action: input_boolean.turn_on
+        - action: notify.persistent_notification
+          data:
+            title: WP Boost angefordert ☀️
+            message: "PV-Überschuss erkannt. Master-Automation delegiert 55°C Ladung."
 
   - id: zappi_smart_charge_solar
     alias: Zappi - Laden starten bei PV-Überschuss (Tags)
@@ -1251,3 +1295,182 @@ automation:
         data:
           title: "⏰ Willkommen zurück (Morgen)!"
           message: "Das Haus wird nun vorgeheizt. Der Urlaubsmodus wurde automatisch beendet."
+
+  - id: zappi_default_eco_plus
+    alias: Zappi - Sicherheit beim Anstecken (ECO +)
+    description: Verhindert versehentliches FAST-Entladen der Hausbatterie am Tag
+    mode: single
+    triggers:
+    - trigger: state
+      entity_id: sensor.myenergi_zappi_15553841_plug_status
+      to: 'Connected'
+    conditions:
+    - condition: time
+      after: '06:00:00'
+      before: '20:00:00'
+    actions:
+    - action: select.select_option
+      target:
+        entity_id: select.myenergi_zappi_15553841_charge_mode
+      data:
+        option: 'ECO +'
+
+  - id: foxess_zappi_kopplung
+    alias: FoxESS Batterie Schutz - dynamische Kopplung an Zappi FAST
+    description: Friert Hausbatterie ein, wenn Zappi im FAST Modus lädt
+    mode: restart
+    triggers:
+    - trigger: state
+      entity_id: sensor.myenergi_zappi_15553841_plug_status
+    - trigger: state
+      entity_id: select.myenergi_zappi_15553841_charge_mode
+    actions:
+    - if:
+      - condition: state
+        entity_id: sensor.myenergi_zappi_15553841_plug_status
+        state: 'Charging'
+      - condition: state
+        entity_id: select.myenergi_zappi_15553841_charge_mode
+        state: 'FAST'
+      then:
+      - action: select.select_option
+        target:
+          entity_id: select.work_mode
+        data:
+          option: 'Back-up'
+      else:
+      - action: select.select_option
+        target:
+          entity_id: select.work_mode
+        data:
+          option: 'Self Use'
+
+  # ==========================================
+  # WP NACHTABSENKUNG (SZENE-SNAPSHOT)
+  # ==========================================
+  - id: wp_nachtabsenkung_start
+    alias: WP Nachtabsenkung Start (21 Uhr)
+    triggers:
+    - at: '21:00:00'
+      trigger: time
+    actions:
+    - action: scene.create
+      data:
+        scene_id: wp_nab_st1
+        snapshot_entities: climate.st1820_80b54e38809c
+    - action: scene.create
+      data:
+        scene_id: wp_nab_st2
+        snapshot_entities: climate.st1820_b08184f2dbc8
+    - action: scene.create
+      data:
+        scene_id: wp_nab_st3
+        snapshot_entities: climate.st1820_b08184f48e64
+    - action: scene.create
+      data:
+        scene_id: wp_nab_st4
+        snapshot_entities: climate.st1820_b08184f67248
+    - action: scene.create
+      data:
+        scene_id: wp_nab_st5
+        snapshot_entities: climate.t_kuche_eg
+    - action: scene.create
+      data:
+        scene_id: wp_nab_st6
+        snapshot_entities: climate.thermostat_buro
+    - action: scene.create
+      data:
+        scene_id: wp_nab_st7
+        snapshot_entities: climate.st1820_b08184f4860c
+    - action: scene.create
+      data:
+        scene_id: wp_nab_st8
+        snapshot_entities: climate.st1820_b08184f5c164
+    - delay: "00:00:05"
+    - action: climate.set_temperature
+      data:
+        temperature: 19
+      target:
+        entity_id: climate.st1820_80b54e38809c
+    - delay: "00:15:00"
+    - action: climate.set_temperature
+      data:
+        temperature: 19
+      target:
+        entity_id: climate.st1820_b08184f2dbc8
+    - delay: "00:15:00"
+    - action: climate.set_temperature
+      data:
+        temperature: 19
+      target:
+        entity_id: climate.st1820_b08184f48e64
+    - delay: "00:15:00"
+    - action: climate.set_temperature
+      data:
+        temperature: 19
+      target:
+        entity_id: climate.st1820_b08184f67248
+    - delay: "00:15:00"
+    - action: climate.set_temperature
+      data:
+        temperature: 19
+      target:
+        entity_id: climate.t_kuche_eg
+    - delay: "00:15:00"
+    - action: climate.set_temperature
+      data:
+        temperature: 19
+      target:
+        entity_id: climate.thermostat_buro
+    - delay: "00:15:00"
+    - action: climate.set_temperature
+      data:
+        temperature: 19
+      target:
+        entity_id: climate.st1820_b08184f4860c
+    - delay: "00:15:00"
+    - action: climate.set_temperature
+      data:
+        temperature: 19
+      target:
+        entity_id: climate.st1820_b08184f5c164
+    mode: single
+
+  - id: wp_nachtabsenkung_ende
+    alias: WP Nachtabsenkung Ende (04 Uhr)
+    triggers:
+    - at: '04:00:00'
+      trigger: time
+    actions:
+    - action: scene.turn_on
+      target:
+        entity_id: scene.wp_nab_st1
+    - delay: "00:15:00"
+    - action: scene.turn_on
+      target:
+        entity_id: scene.wp_nab_st2
+    - delay: "00:15:00"
+    - action: scene.turn_on
+      target:
+        entity_id: scene.wp_nab_st3
+    - delay: "00:15:00"
+    - action: scene.turn_on
+      target:
+        entity_id: scene.wp_nab_st4
+    - delay: "00:15:00"
+    - action: scene.turn_on
+      target:
+        entity_id: scene.wp_nab_st5
+    - delay: "00:15:00"
+    - action: scene.turn_on
+      target:
+        entity_id: scene.wp_nab_st6
+    - delay: "00:15:00"
+    - action: scene.turn_on
+      target:
+        entity_id: scene.wp_nab_st7
+    - delay: "00:15:00"
+    - action: scene.turn_on
+      target:
+        entity_id: scene.wp_nab_st8
+    mode: single

@@ -57,8 +57,7 @@ template:
         device_class: power
         state_class: measurement
         state: >
-          {% set power = states('sensor.shellypro3em_xxxxxxxxxxxx_phase_b_leistung') | float(0) * 3 %}
-          {{ power if power > 50 else 0 }}
+          {{ states('sensor.shellypro3em_e08cfe95cbe0_phase_b_leistung') | float(0) * 3 }}
 
       # Phase C = Innenmodul (1-phasig, direkt)
       - name: "WP Innen Gesamt"

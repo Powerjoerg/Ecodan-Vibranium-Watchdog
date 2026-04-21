@@ -180,6 +180,148 @@ views:
               action: more-info
           # -----------------------------------------
 
+<<<<<<< HEAD
+  # ─── GRID: COP Aktuell + COP Heute ───────────────────────
+  - type: grid
+    columns: 2
+    square: false
+    cards:
+      - type: custom:mushroom-template-card
+        entity: sensor.wp_cop
+        primary: COP Aktuell
+        secondary: >-
+          {% set cop = states('sensor.wp_cop') | float(0) %}
+          {% if cop > 0 %}
+            {{ cop }}
+          {% else %}
+            —
+          {% endif %}
+        icon: mdi:gauge
+        icon_color: |-
+          {% set cop = states('sensor.wp_cop') | float(0) %}
+          {% if cop >= 4 %}
+            green
+          {% elif cop >= 3 %}
+            orange
+          {% elif cop > 0 %}
+            red
+          {% else %}
+            grey
+          {% endif %}
+      - type: custom:mushroom-template-card
+        entity: sensor.wp_cop_heute
+        primary: COP Heute
+        secondary: >-
+          {% set cop = states('sensor.wp_cop_heute') | float(0) %}
+          {% if cop > 0 %}
+            {{ cop }}
+          {% else %}
+            —
+          {% endif %}
+        icon: mdi:chart-line
+        icon_color: |-
+          {% set cop = states('sensor.wp_cop_heute') | float(0) %}
+          {% if cop >= 4 %}
+            green
+          {% elif cop >= 3 %}
+            orange
+          {% elif cop > 0 %}
+            red
+          {% else %}
+            grey
+          {% endif %}
+
+  # ─── GRID: WP Verbrauch Heute / Monat / Jahr ─────────────
+  - type: grid
+    columns: 3
+    square: false
+    cards:
+      - type: custom:mushroom-template-card
+        entity: sensor.wp_verbrauch_heute
+        primary: WP Heute
+        secondary: >-
+          {{ states('sensor.wp_verbrauch_heute') | float(0) | round(2) }} kWh
+        icon: mdi:hours-24
+        icon_color: teal
+      - type: custom:mushroom-template-card
+        entity: sensor.wp_verbrauch_monat
+        primary: WP Monat
+        secondary: >-
+          {{ states('sensor.wp_verbrauch_monat') | float(0) | round(2) }} kWh
+        icon: mdi:calendar-month
+        icon_color: teal
+      - type: custom:mushroom-template-card
+        entity: sensor.wp_verbrauch_jahr
+        primary: WP Jahr
+        secondary: >-
+          {{ states('sensor.wp_verbrauch_jahr') | float(0) | round(2) }} kWh
+        icon: mdi:calendar
+        icon_color: teal
+
+  # ─── GRID: Taktung + Bewertung + PV Boost ────────────────
+  - type: grid
+    columns: 3
+    square: false
+    cards:
+      - type: custom:mushroom-template-card
+        entity: counter.wp_starts_heute
+        primary: Taktung
+        multiline_secondary: true
+        secondary: |-
+          {% set starts = states('counter.wp_starts_heute') | int(0) %}
+          {% set lz = states('sensor.wp_laufzeit_pro_zyklus') | float(0) %}
+          {{ starts }} Starts (Ø {{ lz | round(0) }} min)
+          {% set abtau = states('counter.wp_abtauzyklen_heute') | int(0) %}
+          {% if abtau > 0 %}
+            ❄️ {{ abtau }} Abtau-Zyklen
+          {% endif %}
+        icon: mdi:restart
+        icon_color: |-
+          {% set starts = states('counter.wp_starts_heute') | int(0) %}
+          {% if starts > 10 %}
+            red
+          {% elif starts > 6 %}
+            orange
+          {% else %}
+            green
+          {% endif %}
+      - type: custom:mushroom-template-card
+        entity: sensor.wp_taktungsbewertung
+        primary: Bewertung
+        secondary: "{{ states('sensor.wp_taktungsbewertung') }}"
+        icon: mdi:check-decagram
+        icon_color: |-
+          {% set bew = states('sensor.wp_taktungsbewertung') %}
+          {% if 'Optimal' in bew %}
+            green
+          {% elif 'Normal' in bew %}
+            yellow
+          {% elif 'Beobachten' in bew %}
+            orange
+          {% elif 'Kritisch' in bew %}
+            red
+          {% else %}
+            grey
+          {% endif %}
+      - type: custom:mushroom-template-card
+        entity: input_boolean.wp_boost_aktiv
+        primary: PV Boost
+        secondary: |-
+          {% if is_state('input_boolean.wp_boost_aktiv', 'on') %}
+            🔥 Aktiv — 60°C
+          {% else %}
+            Inaktiv — 50°C
+          {% endif %}
+        icon: mdi:solar-power-variant
+        icon_color: |-
+          {% if is_state('input_boolean.wp_boost_aktiv', 'on') %}
+            orange
+          {% else %}
+            grey
+          {% endif %}
+        tap_action:
+          action: toggle
+=======
           - type: grid
             columns: 2
             square: false
@@ -326,3 +468,4 @@ views:
                   {% endif %}
                 tap_action:
                   action: toggle
+>>>>>>> fd7ba5d86d74fef406071cf9b37930e5cfd8ef8a

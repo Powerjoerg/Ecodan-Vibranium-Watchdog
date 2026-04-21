@@ -8,6 +8,11 @@ input_boolean:
   wp_boost_aktiv:
     name: "WP Boost Flag"
     icon: mdi:fire
+    
+  wp_boost_freigabe:
+    name: "PV-Boost Automatik"
+    icon: mdi:solar-power
+    initial: true
 
 input_number:
   dummy_strompreis:
@@ -820,7 +825,7 @@ automation:
 
   - id: wp_boost_aktivieren
     alias: WP Boost bei PV-Überschuss aktivieren
-    description: Setzt Boost Flag auf ON (Watchdog übernimmt den Modbus Befehl)
+    description: Setzt Boost Flag auf ON (Zweigleisiges Limit: Huckepack oder Kaltstart)
     triggers:
     - entity_id: sensor.feed_in
       above: 1200
@@ -833,24 +838,44 @@ automation:
         minutes: 5
       trigger: numeric_state
     - entity_id: sensor.mitsubishi_wp_isttemperatur_wasserspeicher_tww
-      below: 54
+      below: 45
+      trigger: numeric_state
+    - entity_id: sensor.mitsubishi_wp_warmepumpe_frequenz
+      above: 5
       trigger: numeric_state
     conditions:
+    # --- BASIS: Master-Freigabe, Überschuss und Tageszeit ---
+    - condition: state
+      entity_id: input_boolean.wp_boost_freigabe
+      state: 'on'
+    - condition: state
+      entity_id: input_boolean.wp_boost_aktiv
+      state: 'off'
     - condition: numeric_state
       entity_id: sensor.feed_in
       above: 1200
     - condition: numeric_state
       entity_id: sensor.battery_soc_1
       above: 50
-    - condition: numeric_state
-      entity_id: sensor.mitsubishi_wp_isttemperatur_wasserspeicher_tww
-      below: 54
-    - condition: state
-      entity_id: input_boolean.wp_boost_aktiv
-      state: 'off'
     - condition: time
       after: '07:00:00'
       before: '20:00:00'
+    # --- DIE ZWEIGLEISIGKEIT ---
+    - condition: or
+      conditions:
+        # Schiene 1: Huckepack (WP läuft schon, Kessel hat Platz)
+        - condition: and
+          conditions:
+            - condition: numeric_state
+              entity_id: sensor.mitsubishi_wp_warmepumpe_frequenz
+              above: 5
+            - condition: numeric_state
+              entity_id: sensor.mitsubishi_wp_isttemperatur_wasserspeicher_tww
+              below: 53.0
+        # Schiene 2: Kaltstart (WP wecken, wenn richtig Platz)
+        - condition: numeric_state
+          entity_id: sensor.mitsubishi_wp_isttemperatur_wasserspeicher_tww
+          below: 45.0
     actions:
     - target:
         entity_id: input_boolean.wp_boost_aktiv
@@ -858,7 +883,7 @@ automation:
     - action: notify.persistent_notification
       data:
         title: WP Boost angefordert ☀️
-        message: "PV-Überschuss erkannt. Watchdog delegiert 55°C Ladung."
+        message: "PV-Boost (Zweigleisig) aktiviert! Watchdog delegiert 55°C."
     mode: single
 
   - id: wp_boost_beenden
@@ -867,6 +892,9 @@ automation:
     triggers:
     - at: '21:00:00'
       trigger: time
+    - entity_id: input_boolean.wp_boost_freigabe
+      to: 'off'
+      trigger: state
     - entity_id: sensor.battery_soc_1
       below: 70
       for:

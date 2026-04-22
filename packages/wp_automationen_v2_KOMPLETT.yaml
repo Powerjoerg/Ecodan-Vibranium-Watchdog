@@ -3,6 +3,33 @@
 # INKLUSIVE MODBUS A1M HARDWARE, TEMPLATES UND AUTOMATIONEN
 # PLUS: DYNAMISCHES ENERGIEMANAGEMENT & URLAUBSMODUS V3
 # ==============================================================================
+# 
+# 🚨 DIE 4 GOLDENEN REGELN (NIEMALS BRECHEN!) 🚨
+#
+# 1. Das "Single-Source-of-Truth" Prinzip (Nur ein Chef!)
+#    Physische Hardware (Shelly IN1, Modbus-Register) darf IMMER NUR von EINER
+#    einzigen Master-Automation (dem Watchdog) geschrieben werden. Alle anderen
+#    Automationen (Boost, Urlaub, Preis) reichen nur "Anträge" (Input Booleans)
+#    ein. Der Watchdog fällt das finale Urteil.
+#
+# 2. Zustand statt Moment (Der "Self-Healing" Trigger)
+#    Baue sicherheitskritische Schalter IMMER als Zustandsmaschine. Wenn im 
+#    Moment des Schaltens das WLAN wegbricht, darf die Maschine nicht sterben.
+#    Nutze Polling (/10 Min) oder Dirty Flags, damit das System sich ständig
+#    selbst korrigiert: "Stimmt der Schalter noch mit der Logik überein?"
+#
+# 3. Entkopplung von Ursache und Wirkung (Keine direkten Drähte)
+#    Ein einzelnes Thermostat hat NICHT das Recht, der 14kW WP den Stecker zu 
+#    ziehen. Es meldet nur seinen Zustand. Die Abschaltung entscheidet allein 
+#    die übergeordnete Logik (Haus + Puffer + PV).
+#
+# 4. Der "Edge-Case" Extremtest (Zwangssimulation)
+#    Vor jedem Speichern prüfen:
+#    - PV 100%, aber Puffer kochend heiß (65°C)? -> Failsafe greift?
+#    - Alle Thermostate OFF, aber Puffer eiskalt (30°C)? -> Frostschutz aktiv?
+#    - Haus friert, aber Strompreis extrem teuer (50 ct)? -> Notbetrieb?
+#    Wenn eine Antwort "Kurzzyklus" oder "kalte Dusche" ist = NICHT SPEICHERN!
+# ==============================================================================
 
 input_boolean:
   wp_boost_aktiv:
@@ -872,17 +899,14 @@ automation:
 
   - id: wp_boost_aktivieren
     alias: "WP Boost bei PV-Überschuss aktivieren"
-    description: "Setzt Boost Flag auf ON (Zweigleisiges Limit: Huckepack oder Kaltstart)"
+    description: "Setzt Boost Flag auf ON (Ausschließlich Huckepack: WP muss durch 40° Grenze laufen)"
     triggers:
     - platform: state
       entity_id: binary_sensor.wp_pv_boost_freigabe
       to: 'on'
-    - entity_id: sensor.mitsubishi_wp_isttemperatur_wasserspeicher_tww
-      below: 45
-      trigger: numeric_state
-    - entity_id: sensor.mitsubishi_wp_warmepumpe_frequenz
-      above: 5
-      trigger: numeric_state
+    - platform: state
+      entity_id: sensor.wp_ladewaechter
+      to: 'True'
     conditions:
     # --- BASIS: Master-Freigabe, Panzer-Helfer und Tageszeit ---
     - condition: state
@@ -897,22 +921,13 @@ automation:
     - condition: time
       after: '07:00:00'
       before: '20:00:00'
-    # --- DIE ZWEIGLEISIGKEIT ---
-    - condition: or
-      conditions:
-        # Schiene 1: Huckepack (WP läuft schon, Kessel hat Platz)
-        - condition: and
-          conditions:
-            - condition: numeric_state
-              entity_id: sensor.mitsubishi_wp_warmepumpe_frequenz
-              above: 5
-            - condition: numeric_state
-              entity_id: sensor.mitsubishi_wp_isttemperatur_wasserspeicher_tww
-              below: 53.0
-        # Schiene 2: Kaltstart (WP wecken, wenn richtig Platz)
-        - condition: numeric_state
-          entity_id: sensor.mitsubishi_wp_isttemperatur_wasserspeicher_tww
-          below: 45.0
+    # --- HUCKEPACK ZWANG ---
+    - condition: state
+      entity_id: sensor.wp_ladewaechter
+      state: 'True'
+    - condition: numeric_state
+      entity_id: sensor.mitsubishi_wp_isttemperatur_wasserspeicher_tww
+      below: 53.0
     actions:
     - target:
         entity_id: input_boolean.wp_boost_aktiv
@@ -920,7 +935,7 @@ automation:
     - action: notify.persistent_notification
       data:
         title: WP Boost angefordert ☀️
-        message: "PV-Boost (Zweigleisig) aktiviert! Watchdog delegiert 55°C."
+        message: "PV-Boost (Huckepack) aktiviert! Watchdog delegiert 55°C."
     mode: single
 
   - id: wp_boost_beenden

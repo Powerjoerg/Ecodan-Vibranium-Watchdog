@@ -40,6 +40,34 @@ input_datetime:
     has_time: false
     icon: mdi:calendar-end
 
+input_select:
+  mitsubishi_wp_translations_language:
+    name: "Mitsubishi WP: Translations Language"
+    options:
+      - en
+      - de
+    initial: de
+    
+  wp_urlaubsmodus:
+    name: "Urlaubsmodus"
+    icon: mdi:airplane
+    options:
+      - "Normalbetrieb"
+      - "Sommer-Urlaub (WP AUS)"
+      - "Winter-Urlaub (Minimal 45°C)"
+    initial: "Normalbetrieb"
+
+counter:
+  wp_starts_heute:
+    name: "WP Starts Heute"
+    icon: mdi:restart
+  wp_abtauzyklen_heute:
+    name: "WP Abtauzyklen Heute"
+    icon: mdi:snowflake-melt
+  wp_kurzzyklen_heute:
+    name: "WP Kurzzyklen Heute"
+    icon: mdi:alert-circle-outline
+
 modbus:
   - name: mitsubishi-a1m
     type: serial
@@ -319,23 +347,6 @@ modbus:
         state_class: measurement
         unique_id: mitsubishi_wp_temperatur_mischwasserspeicher
 
-input_select:
-  mitsubishi_wp_translations_language:
-    name: "Mitsubishi WP: Translations Language"
-    options:
-      - en
-      - de
-    initial: de
-    
-  wp_urlaubsmodus:
-    name: "Urlaubsmodus"
-    icon: mdi:airplane
-    options:
-      - "Normalbetrieb"
-      - "Sommer-Urlaub (WP AUS)"
-      - "Winter-Urlaub (Minimal 45°C)"
-    initial: "Normalbetrieb"
-
 template:
   - sensor:
       # --- Hardware Übersetzungen ---
@@ -466,7 +477,7 @@ template:
           {% set wh = states('sensor.mitsubishi_wp_zuletzt_gemessene_erzeugte_warmwasserenergie_wh_anteil') | float(0) %}
           {{ (kwh + (wh / 1000)) | round(2) }}
 
-      # --- Logik Sensoren (Original) ---
+      # --- Logik Sensoren (Die Watchdog 1:1 Spiegelung) ---
       - name: "WP Regelabweichung"
         state: >
           {% set urlaub = states('input_select.wp_urlaubsmodus') %}
@@ -474,9 +485,9 @@ template:
             {% set soll = 15 %}
           {% elif urlaub == 'Winter-Urlaub (Minimal 45°C)' %}
             {% set soll = 45 %}
-          {% elif states('input_boolean.wp_boost_aktiv') == 'on' %}
+          {% elif is_state('input_boolean.wp_boost_aktiv', 'on') %}
             {% set soll = 55 %}
-          {% elif states('sensor.wp_ladewaechter') == 'True' %}
+          {% elif is_state('sensor.wp_ladewaechter', 'True') %}
             {% set soll = 50 %}
           {% else %}
             {% set soll = 40 %}
@@ -790,7 +801,8 @@ template:
       - name: "WP Boost Ziel Erreicht"
         unique_id: wp_boost_ziel_erreicht
         state: >
-          {{ states('sensor.mitsubishi_wp_warmepumpe_frequenz') | float(100) < 5 
+          {{ is_state('input_boolean.wp_boost_aktiv', 'on')
+             and states('sensor.mitsubishi_wp_warmepumpe_frequenz') | float(100) < 5 
              and states('sensor.mitsubishi_wp_abtaubetrieb_raw') not in ['2', '3', 'Abtauung', 'Defrost']
              and states('sensor.mitsubishi_wp_isttemperatur_wasserspeicher_tww') | float(0) >= 50.0 }}
         delay_on: "00:05:00"
@@ -810,8 +822,8 @@ automation:
   # ---> BESTEHENDE ORIGINAL-AUTOMATIONEN
   # =========================================================
   - id: wp_taktung_zaehlen
-    alias: WP Taktung - Start zählen
-    description: Zählt jeden WP-Start wenn Verdichter über 5 Hz geht
+    alias: "WP Taktung - Start zählen"
+    description: "Zählt jeden WP-Start wenn Verdichter über 5 Hz geht"
     triggers:
     - entity_id: sensor.mitsubishi_wp_warmepumpe_frequenz
       above: 5
@@ -825,8 +837,8 @@ automation:
     mode: single
 
   - id: wp_taktung_reset
-    alias: WP Taktung - Reset Mitternacht
-    description: Setzt die WP-Zähler jeden Tag um Mitternacht zurück
+    alias: "WP Taktung - Reset Mitternacht"
+    description: "Setzt die WP-Zähler jeden Tag um Mitternacht zurück"
     triggers:
     - at: '00:00:00'
       trigger: time
@@ -843,8 +855,8 @@ automation:
     mode: single
 
   - id: wp_abtauzyklus_zaehlen
-    alias: WP Taktung - Abtauzyklus zählen & Filtern
-    description: Zählt Abtauvorgänge und filtert sie aus der Taktung heraus
+    alias: "WP Taktung - Abtauzyklus zählen & Filtern"
+    description: "Zählt Abtauvorgänge und filtert sie aus der Taktung heraus"
     triggers:
     - entity_id: sensor.mitsubishi_wp_abtaubetrieb_raw
       to: '2'
@@ -859,39 +871,48 @@ automation:
     mode: single
 
   - id: wp_boost_aktivieren
-    alias: WP Boost bei PV-Überschuss aktivieren
-    description: Setzt Boost Flag auf ON (Watchdog übernimmt den Modbus Befehl)
+    alias: "WP Boost bei PV-Überschuss aktivieren"
+    description: "Setzt Boost Flag auf ON (Zweigleisiges Limit: Huckepack oder Kaltstart)"
     triggers:
-    # 1. State Triggers (Jeder Wechsel in Helfern feuert)
     - platform: state
       entity_id: binary_sensor.wp_pv_boost_freigabe
-    - platform: state
-      entity_id: binary_sensor.wp_boost_abbruch_batterie
-    - platform: state
-      entity_id: binary_sensor.wp_boost_abbruch_pv
-    # 2. Hard-Limiter Triggers
-    - platform: state
-      entity_id: binary_sensor.wp_boost_ziel_erreicht
       to: 'on'
     - entity_id: sensor.mitsubishi_wp_isttemperatur_wasserspeicher_tww
-      below: 54
+      below: 45
+      trigger: numeric_state
+    - entity_id: sensor.mitsubishi_wp_warmepumpe_frequenz
+      above: 5
       trigger: numeric_state
     conditions:
-    - condition: numeric_state
-      entity_id: sensor.feed_in
-      above: 1200
-    - condition: numeric_state
-      entity_id: sensor.battery_soc_1
-      above: 50
-    - condition: numeric_state
-      entity_id: sensor.mitsubishi_wp_isttemperatur_wasserspeicher_tww
-      below: 54
+    # --- BASIS: Master-Freigabe, Panzer-Helfer und Tageszeit ---
+    - condition: state
+      entity_id: input_boolean.wp_boost_freigabe
+      state: 'on'
     - condition: state
       entity_id: input_boolean.wp_boost_aktiv
       state: 'off'
+    - condition: state
+      entity_id: binary_sensor.wp_pv_boost_freigabe
+      state: 'on'
     - condition: time
       after: '07:00:00'
       before: '20:00:00'
+    # --- DIE ZWEIGLEISIGKEIT ---
+    - condition: or
+      conditions:
+        # Schiene 1: Huckepack (WP läuft schon, Kessel hat Platz)
+        - condition: and
+          conditions:
+            - condition: numeric_state
+              entity_id: sensor.mitsubishi_wp_warmepumpe_frequenz
+              above: 5
+            - condition: numeric_state
+              entity_id: sensor.mitsubishi_wp_isttemperatur_wasserspeicher_tww
+              below: 53.0
+        # Schiene 2: Kaltstart (WP wecken, wenn richtig Platz)
+        - condition: numeric_state
+          entity_id: sensor.mitsubishi_wp_isttemperatur_wasserspeicher_tww
+          below: 45.0
     actions:
     - target:
         entity_id: input_boolean.wp_boost_aktiv
@@ -899,29 +920,32 @@ automation:
     - action: notify.persistent_notification
       data:
         title: WP Boost angefordert ☀️
-        message: "PV-Überschuss erkannt. Watchdog delegiert 55°C Ladung."
+        message: "PV-Boost (Zweigleisig) aktiviert! Watchdog delegiert 55°C."
     mode: single
 
   - id: wp_boost_beenden
-    alias: WP Boost beenden
-    description: Setzt Boost Flag auf OFF (Watchdog schickt WP in Zwangsschlaf)
+    alias: "WP Boost beenden"
+    description: "Setzt Boost Flag auf OFF (Zuhören auf Panzer-Helfer für Cockpit-Anzeige)"
     triggers:
     - at: '21:00:00'
       trigger: time
-    - entity_id: sensor.battery_soc_1
-      below: 70
-      for:
-        minutes: 5
-      trigger: numeric_state
+    - entity_id: input_boolean.wp_boost_freigabe
+      to: 'off'
+      trigger: state
+    - entity_id: binary_sensor.wp_boost_abbruch_batterie
+      to: 'on'
+      trigger: state
+    - entity_id: binary_sensor.wp_boost_abbruch_pv
+      to: 'on'
+      trigger: state
+    - entity_id: binary_sensor.wp_boost_ziel_erreicht
+      to: 'on'
+      trigger: state
+    # Hard-Fail-Safe (Falls 55 wirklich mechanisch gerissen werden)
     - entity_id: sensor.mitsubishi_wp_isttemperatur_wasserspeicher_tww
       above: 55.0
       for:
         minutes: 1
-      trigger: numeric_state
-    - entity_id: sensor.pv_power
-      below: 1.0
-      for:
-        minutes: 30
       trigger: numeric_state
     conditions:
     - condition: state
@@ -938,7 +962,7 @@ automation:
     mode: single
 
   - id: zappi_smart_charge_solar
-    alias: Zappi - Laden starten bei PV-Überschuss (Tags)
+    alias: "Zappi - Laden starten bei PV-Überschuss (Tags)"
     triggers:
     - entity_id: sensor.feed_in
       above: 1400
@@ -960,11 +984,16 @@ automation:
       action: select.select_option
     mode: single
 
-  - id: zappi_smart_charge_night
-    alias: Zappi - Nacht-Ladung
+  - id: zappi_smart_charge_dynamisch
+    alias: "Zappi - Laden bei Tibber Tiefstpreis START"
+    description: "Startet FAST Ladung, wenn der Strom extrem günstig ist"
     triggers:
-    - at: '01:00:00'
-      trigger: time
+    - platform: state
+      entity_id: sensor.wp_strategie
+      to: 'BILLIGSTE_STUNDE_JETZT'
+    - platform: numeric_state
+      entity_id: sensor.aktueller_strompreis
+      below: 20
     conditions:
     - condition: template
       value_template: >
@@ -977,43 +1006,43 @@ automation:
       action: select.select_option
     mode: single
 
-  - id: wp_umwaelzpumpe_freigabe_an
-    alias: WP Heizkreispumpe AN
-    description: Schaltet IN1 ein, wenn das Haus Heizbedarf hat
+  - id: zappi_smart_charge_dynamisch_ende
+    alias: "Zappi - Laden bei Tibber Tiefstpreis ENDE"
+    description: "Stoppt FAST Ladung sicher, wenn Strom teurer wird"
     triggers:
-    - entity_id: binary_sensor.haus_heizbedarf
-      to: 'on'
-      trigger: state
-    - platform: homeassistant
-      event: start
+    - platform: numeric_state
+      entity_id: sensor.aktueller_strompreis
+      above: 20
+    - platform: state
+      entity_id: sensor.wp_strategie
+      from: 'BILLIGSTE_STUNDE_JETZT'
     conditions:
+    - condition: template
+      value_template: "{{ states('sensor.wp_strategie') != 'BILLIGSTE_STUNDE_JETZT' }}"
+    - condition: numeric_state
+      entity_id: sensor.aktueller_strompreis
+      above: 20
     - condition: state
-      entity_id: binary_sensor.haus_heizbedarf
-      state: 'on'
+      entity_id: select.myenergi_zappi_15553841_charge_mode
+      state: 'FAST'
+    - condition: template
+      value_template: >
+        {{ states('sensor.myenergi_zappi_15553841_plug_status') in ['Connected', 'Charging', 'Waiting for EV'] }}
     actions:
     - target:
-        entity_id: switch.wp_thermostat_in_1
-      action: switch.turn_on
-    mode: single
-
-  - id: wp_umwaelzpumpe_freigabe_aus
-    alias: WP Heizkreispumpe AUS
-    description: Schaltet IN1 aus, wenn kein Raum mehr heizt
-    triggers:
-    - entity_id: binary_sensor.haus_heizbedarf
-      to: 'off'
-      for:
-        minutes: 10
-      trigger: state
-    actions:
-    - target:
-        entity_id: switch.wp_thermostat_in_1
-      action: switch.turn_off
+        entity_id: select.myenergi_zappi_15553841_charge_mode
+      data:
+        option: 'ECO+'
+      action: select.select_option
+    - action: notify.persistent_notification
+      data:
+        title: "⚡ Zappi Tibber Ladung beendet"
+        message: "Das günstige Zeitfenster ist vorbei. Zappi wurde sicher zurück auf ECO+ gesetzt."
     mode: single
 
   - id: wp_set_dirty_flag
-    alias: WP Diagnose - Set Control Dirty Flag
-    description: Stufe 1 der Hybrid SPS - Fängt Events isoliert ab und triggert den Watchdog zielgerichtet.
+    alias: "WP Diagnose - Set Control Dirty Flag"
+    description: "Stufe 1 der Hybrid SPS - Fängt Events isoliert ab und triggert den Watchdog zielgerichtet."
     mode: queued
     max: 5
     triggers:
@@ -1027,8 +1056,8 @@ automation:
     - event: wp_control_dirty_flag
 
   - id: wp_thermostat_watchdog
-    alias: WP Thermostat & Modbus - Watchdog State Machine
-    description: Berechnet das gültige Ziel nach harter Priorität (10 min Polling + Dirty Flag Wake)
+    alias: "WP Thermostat & Modbus - Watchdog State Machine"
+    description: "Berechnet das gültige Ziel nach harter Priorität (10 min Polling + Dirty Flag Wake)"
     mode: single
     triggers:
     - trigger: homeassistant
@@ -1061,18 +1090,25 @@ automation:
         unit: 1
         address: 30
         value: "{{ (ziel_soll | int) * 100 }}"
-    - if:
-      - condition: state
-        entity_id: switch.wp_thermostat_in_1
-        state: 'on'
-      then:
-      - target:
-          entity_id: switch.wp_thermostat_in_1
-        action: switch.turn_on
+    - choose:
+      - conditions:
+        - condition: template
+          value_template: "{{ is_state('input_boolean.wp_boost_aktiv', 'on') or is_state('sensor.wp_ladewaechter', 'True') }}"
+        sequence:
+        - target:
+            entity_id: switch.wp_thermostat_in_1
+          action: switch.turn_on
+      - conditions:
+        - condition: template
+          value_template: "{{ is_state('input_boolean.wp_boost_aktiv', 'off') and is_state('sensor.wp_ladewaechter', 'False') }}"
+        sequence:
+        - target:
+            entity_id: switch.wp_thermostat_in_1
+          action: switch.turn_off
 
   - id: wp_takten_erkennung
-    alias: WP Takten Erkennung
-    description: Erkennt Kurzzyklen mit Ursachen-Diagnose
+    alias: "WP Takten Erkennung"
+    description: "Erkennt Kurzzyklen mit Ursachen-Diagnose"
     mode: single
     triggers:
     - entity_id: sensor.mitsubishi_wp_warmepumpe_frequenz
@@ -1130,7 +1166,7 @@ automation:
         entity_id: counter.wp_kurzzyklen_heute
 
   - id: wp_fehlercode_benachrichtigung
-    alias: WP Diagnose - Fehlercode erkannt
+    alias: "WP Diagnose - Fehlercode erkannt"
     triggers:
     - entity_id: sensor.mitsubishi_wp_fehlercode_gateway_raw
       to: ~
@@ -1148,7 +1184,7 @@ automation:
     mode: single
 
   - id: wp_modbus_drift_alarm
-    alias: WP Diagnose - Modbus Drift erkannt
+    alias: "WP Diagnose - Modbus Drift erkannt"
     triggers:
     - entity_id: sensor.wp_rueckkanal_status
       to: '🔴 Drift / asynchron'
@@ -1166,8 +1202,8 @@ automation:
     mode: single
 
   - id: wp_heizstab_ueberwachung
-    alias: WP Diagnose - Heizstab aktiv
-    description: Meldet sofort, wenn der FTC6 den Heizstab zuschaltet
+    alias: "WP Diagnose - Heizstab aktiv"
+    description: "Meldet sofort, wenn der FTC6 den Heizstab zuschaltet"
     mode: single
     triggers:
     - entity_id: sensor.wp_heizstab_gesamt
@@ -1294,8 +1330,8 @@ automation:
           message: "Das Haus wird nun vorgeheizt. Der Urlaubsmodus wurde automatisch beendet."
 
   - id: zappi_default_eco_plus
-    alias: Zappi - Sicherheit beim Anstecken (ECO +)
-    description: Verhindert versehentliches FAST-Entladen der Hausbatterie am Tag
+    alias: "Zappi - Sicherheit beim Anstecken (ECO +)"
+    description: "Verhindert versehentliches FAST-Entladen der Hausbatterie am Tag"
     mode: single
     triggers:
     - trigger: state
@@ -1313,8 +1349,8 @@ automation:
         option: 'ECO +'
 
   - id: foxess_zappi_kopplung
-    alias: FoxESS Batterie Schutz - dynamische Kopplung an Zappi FAST
-    description: Friert Hausbatterie ein, wenn Zappi im FAST Modus lädt
+    alias: "FoxESS Batterie Schutz - dynamische Kopplung an Zappi FAST"
+    description: "Friert Hausbatterie ein, wenn Zappi im FAST Modus lädt"
     mode: restart
     triggers:
     - trigger: state
@@ -1346,7 +1382,7 @@ automation:
   # WP NACHTABSENKUNG (SZENE-SNAPSHOT)
   # ==========================================
   - id: wp_nachtabsenkung_start
-    alias: WP Nachtabsenkung Start (21 Uhr)
+    alias: "WP Nachtabsenkung Start (21 Uhr)"
     triggers:
     - at: '21:00:00'
       trigger: time
@@ -1434,7 +1470,7 @@ automation:
     mode: single
 
   - id: wp_nachtabsenkung_ende
-    alias: WP Nachtabsenkung Ende (04 Uhr)
+    alias: "WP Nachtabsenkung Ende (04 Uhr)"
     triggers:
     - at: '04:00:00'
       trigger: time

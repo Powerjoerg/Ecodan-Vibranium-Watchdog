@@ -1,0 +1,1540 @@
+# ==============================================================================
+# MITSUBISHI ECODAN WP PACKAGE - VIBRANIUM ULTRA KOMPLETT
+# INKLUSIVE MODBUS A1M HARDWARE, TEMPLATES UND AUTOMATIONEN
+# PLUS: DYNAMISCHES ENERGIEMANAGEMENT & URLAUBSMODUS V3
+# ==============================================================================
+# 
+# 🚨 DIE 4 GOLDENEN REGELN (NIEMALS BRECHEN!) 🚨
+#
+# 1. Das "Single-Source-of-Truth" Prinzip (Nur ein Chef!)
+#    Physische Hardware (Shelly IN1, Modbus-Register) darf IMMER NUR von EINER
+#    einzigen Master-Automation (dem Watchdog) geschrieben werden. Alle anderen
+#    Automationen (Boost, Urlaub, Preis) reichen nur "Anträge" (Input Booleans)
+#    ein. Der Watchdog fällt das finale Urteil.
+#
+# 2. Zustand statt Moment (Der "Self-Healing" Trigger)
+#    Baue sicherheitskritische Schalter IMMER als Zustandsmaschine. Wenn im 
+#    Moment des Schaltens das WLAN wegbricht, darf die Maschine nicht sterben.
+#    Nutze Polling (/10 Min) oder Dirty Flags, damit das System sich ständig
+#    selbst korrigiert: "Stimmt der Schalter noch mit der Logik überein?"
+#
+# 3. Entkopplung von Ursache und Wirkung (Keine direkten Drähte)
+#    Ein einzelnes Thermostat hat NICHT das Recht, der 14kW WP den Stecker zu 
+#    ziehen. Es meldet nur seinen Zustand. Die Abschaltung entscheidet allein 
+#    die übergeordnete Logik (Haus + Puffer + PV).
+#
+# 4. Der "Edge-Case" Extremtest (Zwangssimulation)
+#    Vor jedem Speichern prüfen:
+#    - PV 100%, aber Puffer kochend heiß (65°C)? -> Failsafe greift?
+#    - Alle Thermostate OFF, aber Puffer eiskalt (30°C)? -> Frostschutz aktiv?
+#    - Haus friert, aber Strompreis extrem teuer (50 ct)? -> Notbetrieb?
+#    Wenn eine Antwort "Kurzzyklus" oder "kalte Dusche" ist = NICHT SPEICHERN!
+# ==============================================================================
+
+input_boolean:
+  wp_boost_aktiv:
+    name: "WP Boost Flag"
+    icon: mdi:fire
+    
+  wp_boost_freigabe:
+    name: "PV-Boost Automatik"
+    icon: mdi:solar-power
+    initial: true
+
+input_number:
+  dummy_strompreis:
+    name: "Test: Strompreis"
+    min: 0
+    max: 50
+    step: 0.5
+    initial: 25
+    unit_of_measurement: "ct/kWh"
+    icon: mdi:cash
+    
+  dummy_solar_prognose:
+    name: "Test: Solar-Prognose"
+    min: 0
+    max: 100
+    step: 1
+    initial: 30
+    unit_of_measurement: "kWh"
+    icon: mdi:solar-power
+
+input_datetime:
+  wp_urlaub_rueckkehr:
+    name: "Rückkehrdatum WP"
+    has_date: true
+    has_time: false
+    icon: mdi:calendar-end
+
+input_select:
+  mitsubishi_wp_translations_language:
+    name: "Mitsubishi WP: Translations Language"
+    options:
+      - en
+      - de
+    initial: de
+    
+  wp_urlaubsmodus:
+    name: "Urlaubsmodus"
+    icon: mdi:airplane
+    options:
+      - "Normalbetrieb"
+      - "Sommer-Urlaub (WP AUS)"
+      - "Winter-Urlaub (Minimal 45°C)"
+    initial: "Normalbetrieb"
+
+counter:
+  wp_starts_heute:
+    name: "WP Starts Heute"
+    icon: mdi:restart
+  wp_abtauzyklen_heute:
+    name: "WP Abtauzyklen Heute"
+    icon: mdi:snowflake-melt
+  wp_kurzzyklen_heute:
+    name: "WP Kurzzyklen Heute"
+    icon: mdi:alert-circle-outline
+
+modbus:
+  - name: mitsubishi-a1m
+    type: serial
+    port: /dev/ttyUSB0
+    baudrate: 9600
+    bytesize: 8
+    parity: N
+    stopbits: 1
+    method: rtu
+    timeout: 2
+
+    binary_sensors:
+      - name: "Mitsubishi WP: Wasserpumpe 1"
+        address: 21
+        scan_interval: 60
+        input_type: discrete_input
+        device_class: running
+        unique_id: mitsubishi_wp_wasserpumpe_1
+
+      - name: "Mitsubishi WP: Wasserpumpe 2"
+        address: 22
+        scan_interval: 60
+        input_type: discrete_input
+        device_class: running
+        unique_id: mitsubishi_wp_wasserpumpe_2
+
+    sensors:
+      - name: "Mitsubishi WP: Fehlercode Gateway (raw)"
+        address: 8
+        data_type: uint16
+        scan_interval: 60
+        input_type: holding
+        unique_id: mitsubishi_wp_fehlercode_gateway_raw
+
+      - name: "Mitsubishi WP: Betriebsart (raw)"
+        address: 26
+        data_type: uint16
+        scan_interval: 60
+        input_type: holding
+        unique_id: mitsubishi_wp_betriebsart_raw
+
+      - name: "Mitsubishi WP: Betriebsart (Warmwasser) (raw)"
+        address: 27
+        data_type: uint16
+        scan_interval: 60
+        input_type: holding
+        unique_id: mitsubishi_wp_betriebsart_warmwasser_raw
+
+      - name: "Mitsubishi WP: A/C Modus Heizkreis 1 (raw)"
+        address: 28
+        data_type: uint16
+        scan_interval: 60
+        input_type: holding
+        unique_id: mitsubishi_wp_a_c_modus_heizkreis_1_raw
+
+      - name: "Mitsubishi WP: Solltemperatur Wasserspeicher (TWW)"
+        address: 30
+        data_type: uint16
+        scale: 0.01
+        precision: 1
+        scan_interval: 60
+        input_type: holding
+        unit_of_measurement: "°C"
+        device_class: temperature
+        state_class: measurement
+        unique_id: mitsubishi_wp_solltemperatur_wasserspeicher_tww
+
+      - name: "Mitsubishi WP: Heizen/Kühlen Thermostat Solltemperatur Heizkreis 1"
+        address: 33
+        data_type: uint16
+        scale: 0.01
+        precision: 1
+        scan_interval: 60
+        input_type: holding
+        unit_of_measurement: "°C"
+        device_class: temperature
+        state_class: measurement
+        unique_id: mitsubishi_wp_heizen_kuhlen_thermostat_solltemperatur_heizkreis_1
+
+      - name: "Mitsubishi WP: Temperaturregler Solltemperatur Heizkreis 1"
+        address: 55
+        data_type: uint16
+        scale: 0.01
+        precision: 1
+        scan_interval: 60
+        input_type: holding
+        unit_of_measurement: "°C"
+        device_class: temperature
+        state_class: measurement
+        unique_id: mitsubishi_wp_temperaturregler_solltemperatur_heizkreis_1
+
+      - name: "Mitsubishi WP: Umschaltung Heizen/Kühlen (raw)"
+        address: 58
+        data_type: uint16
+        scan_interval: 60
+        input_type: holding
+        unique_id: mitsubishi_wp_umschaltung_heizen_kuhlen_raw
+
+      - name: "Mitsubishi WP: Abtaubetrieb (raw)"
+        address: 67
+        data_type: uint16
+        scan_interval: 60
+        input_type: holding
+        unique_id: mitsubishi_wp_abtaubetrieb_raw
+
+      - name: "Mitsubishi WP: Wärmepumpe Frequenz"
+        address: 73
+        data_type: uint16
+        scan_interval: 1
+        input_type: holding
+        unit_of_measurement: "Hz"
+        device_class: frequency
+        state_class: measurement
+        unique_id: mitsubishi_wp_waermepumpe_frequenz
+
+      - name: "Mitsubishi WP: Status Heizquelle (raw)"
+        address: 80
+        data_type: uint16
+        scan_interval: 60
+        input_type: holding
+        unique_id: mitsubishi_wp_status_heizquelle_raw
+
+      - name: "Mitsubishi WP: Außentemperatur"
+        address: 99
+        data_type: int16
+        scale: 0.1
+        precision: 1
+        scan_interval: 60
+        input_type: holding
+        unit_of_measurement: "°C"
+        device_class: temperature
+        state_class: measurement
+        unique_id: mitsubishi_wp_aussentemperatur
+
+      - name: "Mitsubishi WP: Vorlauftemperatur"
+        address: 102
+        data_type: uint16
+        scale: 0.01
+        precision: 1
+        scan_interval: 60
+        input_type: holding
+        unit_of_measurement: "°C"
+        device_class: temperature
+        state_class: measurement
+        unique_id: mitsubishi_wp_vorlauftemperatur
+
+      - name: "Mitsubishi WP: Rücklauftemperatur"
+        address: 104
+        data_type: uint16
+        scale: 0.01
+        precision: 1
+        scan_interval: 60
+        input_type: holding
+        unit_of_measurement: "°C"
+        device_class: temperature
+        state_class: measurement
+        unique_id: mitsubishi_wp_ruecklauftemperatur
+
+      - name: "Mitsubishi WP: Isttemperatur Wasserspeicher (TWW)"
+        address: 106
+        data_type: uint16
+        scale: 0.01
+        precision: 1
+        scan_interval: 1
+        input_type: holding
+        unit_of_measurement: "°C"
+        device_class: temperature
+        state_class: measurement
+        unique_id: mitsubishi_wp_isttemperatur_wasserspeicher_tww
+
+      - name: "Mitsubishi WP: Vorlauftemperatur Heizkreis 1"
+        address: 108
+        data_type: uint16
+        scale: 0.01
+        precision: 1
+        scan_interval: 60
+        input_type: holding
+        unit_of_measurement: "°C"
+        device_class: temperature
+        state_class: measurement
+        unique_id: mitsubishi_wp_vorlauftemperatur_heizkreis_1
+
+      - name: "Mitsubishi WP: Rücklauftemperatur Heizkreis 1"
+        address: 110
+        data_type: uint16
+        scale: 0.01
+        precision: 1
+        scan_interval: 60
+        input_type: holding
+        unit_of_measurement: "°C"
+        device_class: temperature
+        state_class: measurement
+        unique_id: mitsubishi_wp_ruecklauftemperatur_heizkreis_1
+
+      - name: "Mitsubishi WP: Zuletzt gemessene erzeugte Heizenergie kWh-Anteil"
+        address: 292
+        data_type: uint16
+        scan_interval: 60
+        input_type: holding
+        unit_of_measurement: "kWh"
+        device_class: energy
+        state_class: total
+        unique_id: mitsubishi_wp_zuletzt_gemessene_erzeugte_heizenergie_kwh_anteil
+
+      - name: "Mitsubishi WP: Zuletzt gemessene erzeugte Heizenergie Wh-Anteil"
+        address: 293
+        data_type: uint16
+        scale: 10
+        scan_interval: 60
+        input_type: holding
+        unit_of_measurement: "Wh"
+        device_class: energy
+        state_class: total
+        unique_id: mitsubishi_wp_zuletzt_gemessene_erzeugte_heizenergie_wh_anteil
+
+      - name: "Mitsubishi WP: Zuletzt gemessene erzeugte Kühlenergie kWh-Anteil"
+        address: 294
+        data_type: uint16
+        scan_interval: 60
+        input_type: holding
+        unit_of_measurement: "kWh"
+        device_class: energy
+        state_class: total
+        unique_id: mitsubishi_wp_zuletzt_gemessene_erzeugte_kuhlenergie_kwh_anteil
+
+      - name: "Mitsubishi WP: Zuletzt gemessene erzeugte Kühlenergie Wh-Anteil"
+        address: 295
+        data_type: uint16
+        scale: 10
+        scan_interval: 60
+        input_type: holding
+        unit_of_measurement: "Wh"
+        device_class: energy
+        state_class: total
+        unique_id: mitsubishi_wp_zuletzt_gemessene_erzeugte_kuhlenergie_wh_anteil
+
+      - name: "Mitsubishi WP: Zuletzt gemessene erzeugte Warmwasserenergie kWh-Anteil"
+        address: 296
+        data_type: uint16
+        scan_interval: 60
+        input_type: holding
+        unit_of_measurement: "kWh"
+        device_class: energy
+        state_class: total
+        unique_id: mitsubishi_wp_zuletzt_gemessene_erzeugte_warmwasserenergie_kwh_anteil
+
+      - name: "Mitsubishi WP: Zuletzt gemessene erzeugte Warmwasserenergie Wh-Anteil"
+        address: 297
+        data_type: uint16
+        scale: 10
+        scan_interval: 60
+        input_type: holding
+        unit_of_measurement: "Wh"
+        device_class: energy
+        state_class: total
+        unique_id: mitsubishi_wp_zuletzt_gemessene_erzeugte_warmwasserenergie_wh_anteil
+
+      - name: "Mitsubishi WP: Durchflussmenge"
+        address: 299
+        data_type: uint16
+        scan_interval: 60
+        input_type: holding
+        unit_of_measurement: "L/min"
+        device_class: volume_flow_rate
+        state_class: measurement
+        unique_id: mitsubishi_wp_durchflussmenge
+
+      - name: "Mitsubishi WP: Isttemperatur Pufferspeicher (Heizen/Kühlen)"
+        address: 386
+        data_type: uint16
+        scale: 0.01
+        precision: 1
+        scan_interval: 60
+        input_type: holding
+        unit_of_measurement: "°C"
+        device_class: temperature
+        state_class: measurement
+        unique_id: mitsubishi_wp_temperatur_mischwasserspeicher
+
+template:
+  - sensor:
+      # --- Hardware Übersetzungen ---
+      - name: "Mitsubishi WP: Translations"
+        state: "ready"
+        attributes:
+          ac_mode_en: >-
+            {{ {0: 'Heating Room Temp', 1: 'Heating Flow Temp', 2: 'Heating Heat Curve', 3: 'Cooling Room Temp', 4: 'Cooling Flow Temp', 5: 'Floor Dryup'} }}
+          ac_mode_de: >-
+            {{ {0: 'Heizen Raumtemperatur', 1: 'Heizen Vorlauftemperatur', 2: 'Heizen Heizkurve', 3: 'Kühlen Raumtemperatur', 4: 'Kühlen Vorlauftemperatur', 5: 'Estrichtrocknung'} }}
+          defrost_en: >-
+            {{ {0: 'Normal', 1: 'Standby', 2: 'Defrost', 3: 'Waiting restart'} }}
+          defrost_de: >-
+            {{ {0: 'Normal', 1: 'Standby', 2: 'Abtauung', 3: 'Wiederanlauf'} }}
+          dhw_mode_en: >-
+            {{ {0: 'Normal', 1: 'Eco'} }}
+          dhw_mode_de: >-
+            {{ {0: 'Normal', 1: 'Eco'} }}
+          heat_source_status_en: >-
+            {{ {0: 'Heatpump', 1: 'IH', 2: 'BH', 3: 'IH + BH', 4: 'Boiler'} }}
+          heat_source_status_de: >-
+            {{ {0: 'Wärmepumpe', 1: 'Elektrische Einschraubheizung', 2: 'Elektroheizstab', 3: 'Elektrische Einschraubheizung + Elektroheizstab', 4: 'Warmwasserspeicher'} }}
+          heating_cooling_mode_en: >-
+            {{ {0: 'Heating', 1: 'Cooling'} }}
+          heating_cooling_mode_de: >-
+            {{ {0: 'Heizen', 1: 'Kühlen'} }}
+          operating_mode_en: >-
+            {{ {0: 'Stop', 1: 'Hot Water', 2: 'Heating', 3: 'Cooling', 4: 'No voltage contact input (hot water storage)', 5: 'Freeze Stat', 6: 'Legionella', 7: 'Heating-Eco', 8: 'Mode 1', 9: 'Mode 2', 10: 'Mode 3', 11: 'No voltage contact input (heating up)'} }}
+          operating_mode_de: >-
+            {{ {0: 'Stopp', 1: 'Warmwasser', 2: 'Heizen', 3: 'Kühlen', 4: 'Potentialfreier Eingangskontakt (Warmwasserspeicher)', 5: 'Frostschutz', 6: 'Legionellenschutz', 7: 'Heizen-Eco', 8: 'Betriebsart 1', 9: 'Betriebsart 2', 10: 'Betriebsart 3', 11: 'Potentialfreier Eingangskontakt (Aufheizen)'} }}
+
+      - name: "Mitsubishi WP: Betriebsart"
+        unique_id: mitsubishi_wp_betriebsart
+        state: >-
+          {% set lang = states('input_select.mitsubishi_wp_translations_language') %}
+          {% set trans = state_attr('sensor.mitsubishi_wp_translations', 'operating_mode_' ~ lang) %}
+          {% set v = states('sensor.mitsubishi_wp_betriebsart_raw') %}
+          {{ trans.get(v | int(-1), 'Unknown (' ~ v ~ ')') if v not in ['unknown', 'unavailable', 'none'] else v }}
+        attributes:
+          raw_value: "{{ states('sensor.mitsubishi_wp_betriebsart_raw') }}"
+
+      - name: "Mitsubishi WP: Betriebsart (Warmwasser)"
+        unique_id: mitsubishi_wp_betriebsart_warmwasser
+        state: >-
+          {% set lang = states('input_select.mitsubishi_wp_translations_language') %}
+          {% set trans = state_attr('sensor.mitsubishi_wp_translations', 'dhw_mode_' ~ lang) %}
+          {% set v = states('sensor.mitsubishi_wp_betriebsart_warmwasser_raw') %}
+          {{ trans.get(v | int(-1), 'Unknown (' ~ v ~ ')') if v not in ['unknown', 'unavailable', 'none'] else v }}
+        attributes:
+          raw_value: "{{ states('sensor.mitsubishi_wp_betriebsart_warmwasser_raw') }}"
+
+      - name: "Mitsubishi WP: A/C Modus Heizkreis 1"
+        unique_id: mitsubishi_wp_a_c_modus_heizkreis_1
+        state: >-
+          {% set lang = states('input_select.mitsubishi_wp_translations_language') %}
+          {% set trans = state_attr('sensor.mitsubishi_wp_translations', 'ac_mode_' ~ lang) %}
+          {% set v = states('sensor.mitsubishi_wp_a_c_modus_heizkreis_1_raw') %}
+          {{ trans.get(v | int(-1), 'Unknown (' ~ v ~ ')') if v not in ['unknown', 'unavailable', 'none'] else v }}
+        attributes:
+          raw_value: "{{ states('sensor.mitsubishi_wp_a_c_modus_heizkreis_1_raw') }}"
+
+      - name: "Mitsubishi WP: Umschaltung Heizen/Kühlen"
+        unique_id: mitsubishi_wp_umschaltung_heizen_kuhlen
+        state: >-
+          {% set lang = states('input_select.mitsubishi_wp_translations_language') %}
+          {% set trans = state_attr('sensor.mitsubishi_wp_translations', 'heating_cooling_mode_' ~ lang) %}
+          {% set v = states('sensor.mitsubishi_wp_umschaltung_heizen_kuhlen_raw') %}
+          {{ trans.get(v | int(-1), 'Unknown (' ~ v ~ ')') if v not in ['unknown', 'unavailable', 'none'] else v }}
+        attributes:
+          raw_value: "{{ states('sensor.mitsubishi_wp_umschaltung_heizen_kuhlen_raw') }}"
+
+      - name: "Mitsubishi WP: Abtaubetrieb"
+        unique_id: mitsubishi_wp_abtaubetrieb
+        state: >-
+          {% set lang = states('input_select.mitsubishi_wp_translations_language') %}
+          {% set trans = state_attr('sensor.mitsubishi_wp_translations', 'defrost_' ~ lang) %}
+          {% set v = states('sensor.mitsubishi_wp_abtaubetrieb_raw') %}
+          {{ trans.get(v | int(-1), 'Unknown (' ~ v ~ ')') if v not in ['unknown', 'unavailable', 'none'] else v }}
+        attributes:
+          raw_value: "{{ states('sensor.mitsubishi_wp_abtaubetrieb_raw') }}"
+
+      - name: "Mitsubishi WP: Status Heizquelle"
+        unique_id: mitsubishi_wp_status_heizquelle
+        state: >-
+          {% set lang = states('input_select.mitsubishi_wp_translations_language') %}
+          {% set trans = state_attr('sensor.mitsubishi_wp_translations', 'heat_source_status_' ~ lang) %}
+          {% set v = states('sensor.mitsubishi_wp_status_heizquelle_raw') %}
+          {{ trans.get(v | int(-1), 'Unknown (' ~ v ~ ')') if v not in ['unknown', 'unavailable', 'none'] else v }}
+        attributes:
+          raw_value: "{{ states('sensor.mitsubishi_wp_status_heizquelle_raw') }}"
+
+      - name: "Mitsubishi WP: Zuletzt gemessene erzeugte Heizenergie"
+        unique_id: mitsubishi_wp_zuletzt_gemessene_erzeugte_heizenergie
+        unit_of_measurement: "kWh"
+        device_class: energy
+        state_class: total
+        availability: >-
+          {{ states('sensor.mitsubishi_wp_zuletzt_gemessene_erzeugte_heizenergie_kwh_anteil') not in ['unknown', 'unavailable', 'none']
+             and states('sensor.mitsubishi_wp_zuletzt_gemessene_erzeugte_heizenergie_wh_anteil') not in ['unknown', 'unavailable', 'none'] }}
+        state: >-
+          {% set kwh = states('sensor.mitsubishi_wp_zuletzt_gemessene_erzeugte_heizenergie_kwh_anteil') | float(0) %}
+          {% set wh = states('sensor.mitsubishi_wp_zuletzt_gemessene_erzeugte_heizenergie_wh_anteil') | float(0) %}
+          {{ (kwh + (wh / 1000)) | round(2) }}
+
+      - name: "Mitsubishi WP: Zuletzt gemessene erzeugte Kühlenergie"
+        unique_id: mitsubishi_wp_zuletzt_gemessene_erzeugte_kuhlenergie
+        unit_of_measurement: "kWh"
+        device_class: energy
+        state_class: total
+        availability: >-
+          {{ states('sensor.mitsubishi_wp_zuletzt_gemessene_erzeugte_kuhlenergie_kwh_anteil') not in ['unknown', 'unavailable', 'none']
+             and states('sensor.mitsubishi_wp_zuletzt_gemessene_erzeugte_kuhlenergie_wh_anteil') not in ['unknown', 'unavailable', 'none'] }}
+        state: >-
+          {% set kwh = states('sensor.mitsubishi_wp_zuletzt_gemessene_erzeugte_kuhlenergie_kwh_anteil') | float(0) %}
+          {% set wh = states('sensor.mitsubishi_wp_zuletzt_gemessene_erzeugte_kuhlenergie_wh_anteil') | float(0) %}
+          {{ (kwh + (wh / 1000)) | round(2) }}
+
+      - name: "Mitsubishi WP: Zuletzt gemessene erzeugte Warmwasserenergie"
+        unique_id: mitsubishi_wp_zuletzt_gemessene_erzeugte_warmwasserenergie
+        unit_of_measurement: "kWh"
+        device_class: energy
+        state_class: total
+        availability: >-
+          {{ states('sensor.mitsubishi_wp_zuletzt_gemessene_erzeugte_warmwasserenergie_kwh_anteil') not in ['unknown', 'unavailable', 'none']
+             and states('sensor.mitsubishi_wp_zuletzt_gemessene_erzeugte_warmwasserenergie_wh_anteil') not in ['unknown', 'unavailable', 'none'] }}
+        state: >-
+          {% set kwh = states('sensor.mitsubishi_wp_zuletzt_gemessene_erzeugte_warmwasserenergie_kwh_anteil') | float(0) %}
+          {% set wh = states('sensor.mitsubishi_wp_zuletzt_gemessene_erzeugte_warmwasserenergie_wh_anteil') | float(0) %}
+          {{ (kwh + (wh / 1000)) | round(2) }}
+
+      # --- Logik Sensoren (Die Watchdog 1:1 Spiegelung) ---
+      - name: "WP Regelabweichung"
+        state: >
+          {% set urlaub = states('input_select.wp_urlaubsmodus') %}
+          {% if urlaub == 'Sommer-Urlaub (WP AUS)' %}
+            {% set soll = 15 %}
+          {% elif urlaub == 'Winter-Urlaub (Minimal 45°C)' %}
+            {% set soll = 45 %}
+          {% elif is_state('input_boolean.wp_boost_aktiv', 'on') %}
+            {% set soll = 55 %}
+          {% elif is_state('binary_sensor.wp_ladewaechter', 'on') %}
+            {% set soll = 50 %}
+          {% else %}
+            {% set soll = 40 %}
+          {% endif %}
+          {% set echo = states('sensor.mitsubishi_wp_solltemperatur_wasserspeicher_tww') | float(0) %}
+          {{ (echo - soll) | round(1) }}
+        unit_of_measurement: "K"
+
+      - name: "WP Rueckkanal Status"
+        state: >
+          {% set abweichung = states('sensor.wp_regelabweichung') | float(0) | abs %}
+          {% if abweichung == 0 %}
+            🟢 Synchron
+          {% elif abweichung <= 2 %}
+            🟡 Leichte Abweichung
+          {% else %}
+            🔴 Drift / asynchron
+          {% endif %}
+
+
+      - name: "WP Aussen Gesamt"
+        unit_of_measurement: "W"
+        device_class: power
+        state_class: measurement
+        state: >
+          {{ states('sensor.shelly_wp_phase_a_leistung') | float(0) * 3 }}
+
+      - name: "WP Heizstab Gesamt"
+        unit_of_measurement: "W"
+        device_class: power
+        state_class: measurement
+        state: >
+          {% set power = states('sensor.shelly_wp_phase_b_leistung') | float(0) * 3 %}
+          {{ power if power > 50 else 0 }}
+
+      - name: "WP Innen Gesamt"
+        unit_of_measurement: "W"
+        device_class: power
+        state_class: measurement
+        state: >
+          {{ states('sensor.shelly_wp_phase_c_leistung') | float(0) }}
+
+      - name: "WP Gesamtverbrauch"
+        unit_of_measurement: "W"
+        device_class: power
+        state_class: measurement
+        state: >
+          {{ (states('sensor.shelly_wp_phase_a_leistung') | float(0) * 3)
+           + (states('sensor.shelly_wp_phase_b_leistung') | float(0) * 3)
+           + (states('sensor.shelly_wp_phase_c_leistung') | float(0)) }}
+
+      - name: "WP Waermeleistung"
+        unit_of_measurement: "W"
+        device_class: power
+        state_class: measurement
+        state: >
+          {% set freq = states('sensor.mitsubishi_wp_warmepumpe_frequenz') | float(0) %}
+          {% set flow = states('sensor.mitsubishi_wp_durchflussmenge') | float(0) %}
+          {% set vl = states('sensor.mitsubishi_wp_vorlauftemperatur') | float(0) %}
+          {% set rl = states('sensor.mitsubishi_wp_rucklauftemperatur') | float(0) %}
+          {% if freq > 5 and flow > 0 and (vl - rl) > 0.5 %}
+            {{ (flow * (vl - rl) * 4186 / 60) | round(0) }}
+          {% else %}
+            0
+          {% endif %}
+
+      - name: "WP COP"
+        state: >
+          {% set flow = states('sensor.mitsubishi_wp_durchflussmenge') | float(0) %}
+          {% set vl = states('sensor.mitsubishi_wp_vorlauftemperatur') | float(0) %}
+          {% set rl = states('sensor.mitsubishi_wp_rucklauftemperatur') | float(0) %}
+          {% set el = states('sensor.wp_gesamtverbrauch') | float(0) %}
+          {% if el > 200 and flow > 0 and (vl - rl) > 0.5 %}
+            {{ ((flow * (vl - rl) * 4186 / 60) / el) | round(2) }}
+          {% else %}
+            {{ this.state | default(0) }}
+          {% endif %}
+
+      - name: "WP COP Heute"
+        state: >
+          {% set waerme = states('sensor.wp_waerme_heute') | float(0) %}
+          {% set strom = states('sensor.wp_verbrauch_heute') | float(0) %}
+          {% if strom > 0.1 and waerme > 0 %}
+            {{ (waerme / strom) | round(2) }}
+          {% else %}
+            {{ this.state | default(0) }}
+          {% endif %}
+
+      - name: "WP Laufzeit pro Zyklus"
+        unit_of_measurement: "min"
+        state: >
+          {% set starts = states('counter.wp_starts_heute') | int(0) %}
+          {% set laufzeit_h = states('sensor.wp_laufzeit_heute') | float(0) %}
+          {% if starts > 0 %}
+            {{ (laufzeit_h * 60 / starts) | round(0) }}
+          {% else %}
+            0
+          {% endif %}
+
+      - name: "WP Taktungsbewertung"
+        state: >
+          {% set starts = states('counter.wp_starts_heute') | int(0) %}
+          {% set laufzeit_h = states('sensor.wp_laufzeit_heute') | float(0) %}
+          {% set laeuft = states('binary_sensor.wp_laeuft') %}
+          {% set avg_min = (laufzeit_h * 60 / starts) | round(0) if starts > 0 else 0 %}
+          {% if starts == 0 and laeuft == 'on' %}
+            🟢 Dauerlauf
+          {% elif starts == 0 %}
+            {{ this.state | default('Kein Betrieb') }}
+          {% elif starts <= 2 %}
+            🟢 Optimal
+          {% elif starts <= 4 and avg_min >= 30 %}
+            🟢 Gut
+          {% elif starts <= 4 %}
+            🟡 Normal
+          {% elif starts <= 8 and avg_min >= 15 %}
+            🟡 Normal
+          {% elif starts <= 8 %}
+            🟠 Beobachten
+          {% else %}
+            🔴 Kritisch
+          {% endif %}
+
+      # =========================================================
+      # ---> NEUE SENSOREN: DYNAMISCHER STROM (TIBBER/RABOT)
+      # =========================================================
+      - name: "Aktueller Strompreis"
+        unique_id: aktueller_strompreis
+        unit_of_measurement: "ct/kWh"
+        device_class: monetary
+        state_class: measurement
+        icon: mdi:currency-eur
+        state: >
+          {% set echt_preis = states('sensor.electricity_price_your_home') %}
+          {% if echt_preis not in ['unavailable', 'unknown', 'none'] %}
+            {{ (echt_preis | float(0)) * 100 }}
+          {% else %}
+            {{ states('input_number.dummy_strompreis') | float(25) }}
+          {% endif %}
+      
+      - name: "Solar Prognose Heute"
+        unique_id: solar_prognose_heute
+        unit_of_measurement: "kWh"
+        device_class: energy
+        state_class: total
+        icon: mdi:solar-power
+        state: >
+          {% set echt_forecast = states('sensor.energy_production_today') %}
+          {% if echt_forecast not in ['unavailable', 'unknown', 'none'] %}
+            {{ echt_forecast | float(0) }}
+          {% else %}
+            {{ states('input_number.dummy_solar_prognose') | float(30) }}
+          {% endif %}
+
+      - name: "WP Strategie"
+        unique_id: wp_strategie
+        state: >
+          {% set preis_jetzt = states('sensor.aktueller_strompreis') | float(25) %}
+          
+          {# Prüfe echten Tiefstpreis, falls Tibber liefert #}
+          {% set echt_preis_min = states('sensor.electricity_price_min_your_home') %}
+          {% if echt_preis_min not in ['unavailable', 'unknown', 'none'] %}
+            {% set min_heute = (echt_preis_min | float(0)) * 100 %}
+          {% else %}
+            {% set min_heute = states('input_number.dummy_strompreis') | float(25) * 0.8 %}
+          {% endif %}
+
+          {% set solar_heute = states('sensor.solar_prognose_heute') | float(30) %}
+          {% set solar_morgen = states('input_number.dummy_solar_prognose') | float(30) %}
+          {% set stunde = now().hour %}
+          
+          {% if (preis_jetzt - min_heute) <= 2 %}
+            BILLIGSTE_STUNDE_JETZT
+          {% elif solar_morgen > 40 and stunde >= 18 %}
+            SPAREN_FUER_MORGEN
+          {% elif solar_heute > 20 and stunde < 10 %}
+            SPAREN_FUER_MITTAG
+          {% else %}
+            NORMAL
+          {% endif %}
+
+      - name: "WP Puffer Soll Dynamisch"
+        unique_id: wp_puffer_soll_dynamisch
+        unit_of_measurement: "°C"
+        device_class: temperature
+        icon: mdi:thermometer-auto
+        state: >
+          {% set strategie = states('sensor.wp_strategie') %}
+          {% set preis = states('sensor.aktueller_strompreis') | float(25) %}
+          {% set puffer_ist = states('sensor.mitsubishi_wp_isttemperatur_wasserspeicher_tww') | float(45) %}
+          
+          {# Failsafe-Redundanz (Greift erst, falls Watchdog/Ladewaechter bei 40°C versagt haben) #}
+          {% if puffer_ist < 38 %}
+            50
+          {# Spar-Strategien MÜSSEN vor den absoluten Preisen kommen! #}
+          {% elif strategie in ['SPAREN_FUER_MORGEN', 'SPAREN_FUER_MITTAG'] %}
+            42
+          {% elif strategie == 'BILLIGSTE_STUNDE_JETZT' or preis <= 10 %}
+            60
+          {% elif preis <= 15 %}
+            55
+          {% elif preis <= 20 %}
+            50
+          {% elif preis <= 28 %}
+            48
+          {% else %}
+            40
+          {% endif %}
+
+      # =========================================================
+      # ---> NEUE SENSOREN: URLAUBSMODUS
+      # =========================================================
+      - name: "WP Urlaub Status"
+        unique_id: wp_urlaub_status
+        state: >
+          {% set modus = states('input_select.wp_urlaubsmodus') %}
+          {% set rueckkehr = states('input_datetime.wp_urlaub_rueckkehr') %}
+          {% if modus == 'Normalbetrieb' %}
+            ✅ Zuhause
+          {% else %}
+            ✈️ {{ modus }} — Rückkehr: {{ rueckkehr.split(' ')[0] }}
+          {% endif %}
+
+  - binary_sensor:
+      - name: "WP Laeuft"
+        state: >
+          {{ states('sensor.mitsubishi_wp_warmepumpe_frequenz') | float(0) > 5 }}
+
+      - name: "WP Ladewaechter"
+        unique_id: wp_ladewaechter
+        state: >
+          {% set current_state = is_state('binary_sensor.wp_ladewaechter', 'on') %}
+          {% set raw_temp = states('sensor.mitsubishi_wp_isttemperatur_wasserspeicher_tww') %}
+          
+          {% if raw_temp in ['unavailable', 'unknown', 'none'] %}
+            {{ current_state }}
+          {% else %}
+            {% set temp = raw_temp | float(45) %}
+            
+            {% set urlaub = states('input_select.wp_urlaubsmodus') %}
+            {% if urlaub == 'Sommer-Urlaub (WP AUS)' %}
+              {% set target = 15 %}
+            {% elif urlaub == 'Winter-Urlaub (Minimal 45°C)' %}
+              {% set target = 45 %}
+            {% elif states('input_boolean.wp_boost_aktiv') == 'on' %}
+              {% set target = 55 %}
+            {% else %}
+              {% set target = 50 %}
+            {% endif %}
+            
+            {# V4.0 Spike-Filter: Ignoriere Modbus-Geisterwerte über 80°C oder unter 5°C #}
+            {% if temp > 80 or temp < 5 %}
+              {{ current_state }}
+            {% elif temp < 40 %}
+              true
+            {% elif temp >= (target - 0.8) %}
+              false
+            {% else %}
+              {{ current_state }}
+            {% endif %}
+          {% endif %}
+
+      # --- Haus Heizbedarf (Sammelt alle Einzelraum-Ventile) ---
+      - name: "Haus Heizbedarf"
+        unique_id: haus_heizbedarf
+        state: >
+          {% set thermostats = [
+            'climate.thermostat_1',
+            'climate.thermostat_2',
+            'climate.thermostat_5',
+            'climate.thermostat_3',
+            'climate.thermostat_6',
+            'climate.thermostat_4',
+            'climate.t_kuche_eg',
+            'climate.thermostat_buro'
+          ] %}
+          {% set ns = namespace(needs_heat=false) %}
+          {% for t in thermostats %}
+            {% set current = state_attr(t, 'current_temperature') %}
+            {% set target = state_attr(t, 'temperature') %}
+            {% if current != none and target != none %}
+              {% if (current | float) < (target | float) %}
+                {% set ns.needs_heat = true %}
+              {% endif %}
+            {% endif %}
+            {% if state_attr(t, 'hvac_action') == 'heating' %}
+              {% set ns.needs_heat = true %}
+            {% endif %}
+          {% endfor %}
+          {{ ns.needs_heat }}
+
+      # =========================================================
+      # ---> PANZER-HELFER FÜR PV BOOST (MIT DELAY_OFF NERVEN-SCHUTZ)
+      # =========================================================
+      - name: "WP PV Boost Freigabe"
+        unique_id: wp_pv_boost_freigabe
+        state: >
+          {{ states('sensor.feed_in') | float(0) > 1200 and states('sensor.battery_soc_1') | float(0) > 50 }}
+        delay_on: "00:05:00"
+        delay_off: "00:05:00"
+
+      - name: "WP Boost Abbruch PV"
+        unique_id: wp_boost_abbruch_pv
+        state: >
+          {{ states('sensor.pv_power') | float(10) < 1.0 }}
+        delay_on: "00:30:00"
+        delay_off: "00:05:00"
+
+      - name: "WP Boost Abbruch Batterie"
+        unique_id: wp_boost_abbruch_batterie
+        state: >
+          {{ states('sensor.battery_soc_1') | float(100) < 70 }}
+        delay_on: "00:05:00"
+        delay_off: "00:05:00"
+
+      - name: "WP Boost Ziel Erreicht"
+        unique_id: wp_boost_ziel_erreicht
+        state: >
+          {{ is_state('input_boolean.wp_boost_aktiv', 'on')
+             and states('sensor.mitsubishi_wp_warmepumpe_frequenz') | float(100) < 5 
+             and states('sensor.mitsubishi_wp_abtaubetrieb_raw') not in ['2', '3', 'Abtauung', 'Defrost']
+             and states('sensor.mitsubishi_wp_isttemperatur_wasserspeicher_tww') | float(0) >= 50.0 }}
+        delay_on: "00:05:00"
+        delay_off: "00:02:00"
+
+sensor:
+  - platform: history_stats
+    name: "WP Laufzeit Heute"
+    entity_id: binary_sensor.wp_laeuft
+    state: "on"
+    type: time
+    start: "{{ now().replace(hour=0, minute=0, second=0) }}"
+    end: "{{ now() }}"
+
+automation:
+  # =========================================================
+  # ---> BESTEHENDE ORIGINAL-AUTOMATIONEN
+  # =========================================================
+  - id: wp_taktung_zaehlen
+    alias: "WP Taktung - Start zählen"
+    description: "Zählt jeden WP-Start wenn Verdichter über 5 Hz geht"
+    triggers:
+    - entity_id: sensor.mitsubishi_wp_warmepumpe_frequenz
+      above: 5
+      for:
+        minutes: 1
+      trigger: numeric_state
+    actions:
+    - target:
+        entity_id: counter.wp_starts_heute
+      action: counter.increment
+    mode: single
+
+  - id: wp_taktung_reset
+    alias: "WP Taktung - Reset Mitternacht"
+    description: "Setzt die WP-Zähler jeden Tag um Mitternacht zurück"
+    triggers:
+    - at: '00:00:00'
+      trigger: time
+    actions:
+    - target:
+        entity_id: counter.wp_starts_heute
+      action: counter.reset
+    - target:
+        entity_id: counter.wp_abtauzyklen_heute
+      action: counter.reset
+    - target:
+        entity_id: counter.wp_kurzzyklen_heute
+      action: counter.reset
+    mode: single
+
+  - id: wp_abtauzyklus_zaehlen
+    alias: "WP Taktung - Abtauzyklus zählen & Filtern"
+    description: "Zählt Abtauvorgänge und filtert sie aus der Taktung heraus"
+    triggers:
+    - entity_id: sensor.mitsubishi_wp_abtaubetrieb_raw
+      to: '2'
+      trigger: state
+    actions:
+    - target:
+        entity_id: counter.wp_abtauzyklen_heute
+      action: counter.increment
+    - target:
+        entity_id: counter.wp_starts_heute
+      action: counter.decrement
+    mode: single
+
+  - id: wp_boost_aktivieren
+    alias: "WP Boost bei PV-Überschuss aktivieren"
+    description: "Setzt Boost Flag auf ON (Ausschließlich Huckepack: WP muss durch 40° Grenze laufen)"
+    triggers:
+    - platform: state
+      entity_id: binary_sensor.wp_pv_boost_freigabe
+      to: 'on'
+    - platform: state
+      entity_id: binary_sensor.wp_ladewaechter
+      to: 'on'
+    conditions:
+    # --- BASIS: Master-Freigabe, Panzer-Helfer und Tageszeit ---
+    - condition: state
+      entity_id: input_boolean.wp_boost_freigabe
+      state: 'on'
+    - condition: state
+      entity_id: input_boolean.wp_boost_aktiv
+      state: 'off'
+    - condition: state
+      entity_id: binary_sensor.wp_pv_boost_freigabe
+      state: 'on'
+    - condition: time
+      after: '07:00:00'
+      before: '20:00:00'
+    # --- HUCKEPACK ZWANG ---
+    - condition: state
+      entity_id: binary_sensor.wp_ladewaechter
+      state: 'on'
+    - condition: numeric_state
+      entity_id: sensor.mitsubishi_wp_isttemperatur_wasserspeicher_tww
+      below: 53.0
+    actions:
+    - target:
+        entity_id: input_boolean.wp_boost_aktiv
+      action: input_boolean.turn_on
+    - action: notify.persistent_notification
+      data:
+        title: WP Boost angefordert ☀️
+        message: "PV-Boost (Huckepack) aktiviert! Watchdog delegiert 55°C."
+    mode: single
+
+  - id: wp_boost_beenden
+    alias: "WP Boost beenden"
+    description: "Setzt Boost Flag auf OFF (Zuhören auf Panzer-Helfer für Cockpit-Anzeige)"
+    triggers:
+    - at: '21:00:00'
+      trigger: time
+    - entity_id: input_boolean.wp_boost_freigabe
+      to: 'off'
+      trigger: state
+    - entity_id: binary_sensor.wp_boost_abbruch_batterie
+      to: 'on'
+      trigger: state
+    - entity_id: binary_sensor.wp_boost_abbruch_pv
+      to: 'on'
+      trigger: state
+    - entity_id: binary_sensor.wp_boost_ziel_erreicht
+      to: 'on'
+      trigger: state
+    # Hard-Fail-Safe (Falls 55 wirklich mechanisch gerissen werden / Software-Stopp)
+    - entity_id: sensor.mitsubishi_wp_isttemperatur_wasserspeicher_tww
+      above: 54.0
+      for:
+        minutes: 1
+      trigger: numeric_state
+    conditions:
+    - condition: state
+      entity_id: input_boolean.wp_boost_aktiv
+      state: 'on'
+    actions:
+    - target:
+        entity_id: input_boolean.wp_boost_aktiv
+      action: input_boolean.turn_off
+    - action: notify.persistent_notification
+      data:
+        title: WP Boost beendet 🌙
+        message: "PV-Boost Flag entfernt. Watchdog bewertet Zustand neu."
+    mode: single
+
+  - id: zappi_smart_charge_solar
+    alias: "Zappi - Laden starten bei PV-Überschuss (Tags)"
+    triggers:
+    - entity_id: sensor.feed_in
+      above: 1400
+      for:
+        minutes: 5
+      trigger: numeric_state
+    conditions:
+    - condition: template
+      value_template: >
+        {{ states('sensor.zappi_plug_status') in ['Connected', 'Charging', 'Waiting for EV'] }}
+    - condition: numeric_state
+      entity_id: sensor.battery_soc_1
+      above: 80
+    actions:
+    - target:
+        entity_id: select.zappi_charge_mode
+      data:
+        option: ECO+
+      action: select.select_option
+    mode: single
+
+  - id: zappi_smart_charge_dynamisch
+    alias: "Zappi - Laden bei Tibber Tiefstpreis START"
+    description: "Startet FAST Ladung, wenn der Strom extrem günstig ist"
+    triggers:
+    - platform: state
+      entity_id: sensor.wp_strategie
+      to: 'BILLIGSTE_STUNDE_JETZT'
+    - platform: numeric_state
+      entity_id: sensor.aktueller_strompreis
+      below: 20
+    conditions:
+    - condition: template
+      value_template: >
+        {{ states('sensor.zappi_plug_status') in ['Connected', 'Charging', 'Waiting for EV'] }}
+    actions:
+    - target:
+        entity_id: select.zappi_charge_mode
+      data:
+        option: FAST
+      action: select.select_option
+    mode: single
+
+  - id: zappi_smart_charge_dynamisch_ende
+    alias: "Zappi - Laden bei Tibber Tiefstpreis ENDE"
+    description: "Stoppt FAST Ladung sicher, wenn Strom teurer wird"
+    triggers:
+    - platform: numeric_state
+      entity_id: sensor.aktueller_strompreis
+      above: 20
+    - platform: state
+      entity_id: sensor.wp_strategie
+      from: 'BILLIGSTE_STUNDE_JETZT'
+    conditions:
+    - condition: template
+      value_template: "{{ states('sensor.wp_strategie') != 'BILLIGSTE_STUNDE_JETZT' }}"
+    - condition: numeric_state
+      entity_id: sensor.aktueller_strompreis
+      above: 20
+    - condition: state
+      entity_id: select.zappi_charge_mode
+      state: 'FAST'
+    - condition: template
+      value_template: >
+        {{ states('sensor.zappi_plug_status') in ['Connected', 'Charging', 'Waiting for EV'] }}
+    actions:
+    - target:
+        entity_id: select.zappi_charge_mode
+      data:
+        option: 'ECO+'
+      action: select.select_option
+    - action: notify.persistent_notification
+      data:
+        title: "⚡ Zappi Tibber Ladung beendet"
+        message: "Das günstige Zeitfenster ist vorbei. Zappi wurde sicher zurück auf ECO+ gesetzt."
+    mode: single
+
+  - id: wp_set_dirty_flag
+    alias: "WP Diagnose - Set Control Dirty Flag"
+    description: "Stufe 1 der Hybrid SPS - Fängt Events isoliert ab und triggert den Watchdog zielgerichtet."
+    mode: queued
+    max: 5
+    triggers:
+    - entity_id: input_boolean.wp_boost_aktiv
+      trigger: state
+    - entity_id: binary_sensor.wp_ladewaechter
+      trigger: state
+    - entity_id: sensor.wp_puffer_soll_dynamisch
+      trigger: state
+    actions:
+    - event: wp_control_dirty_flag
+
+  - id: wp_thermostat_watchdog
+    alias: "WP Thermostat & Modbus - Watchdog State Machine"
+    description: "Write-On-Change für Reg30 + 5-Minuten Read Keep-Alive"
+    mode: single
+    triggers:
+    - trigger: homeassistant
+      event: start
+    - trigger: time_pattern
+      minutes: "/5"
+    - trigger: event
+      event_type: wp_control_dirty_flag
+    conditions:
+    - condition: template
+      value_template: "{{ states('input_select.wp_urlaubsmodus') != 'Sommer-Urlaub (WP AUS)' }}"
+    actions:
+    - variables:
+        ziel_soll: >
+          {% set urlaub = states('input_select.wp_urlaubsmodus') %}
+          {% if urlaub == 'Sommer-Urlaub (WP AUS)' %}
+            15
+          {% elif urlaub == 'Winter-Urlaub (Minimal 45°C)' %}
+            45
+          {% elif is_state('input_boolean.wp_boost_aktiv', 'on') %}
+            55
+          {% elif is_state('binary_sensor.wp_ladewaechter', 'on') %}
+            50
+          {% else %}
+            40
+          {% endif %}
+        aktuelles_echo: "{{ states('sensor.mitsubishi_wp_solltemperatur_wasserspeicher_tww') | float(0) }}"
+    - choose:
+      - conditions:
+        - condition: template
+          value_template: "{{ (ziel_soll | float) != aktuelles_echo }}"
+        sequence:
+        - action: modbus.write_register
+          data:
+            hub: mitsubishi-a1m
+            unit: 1
+            address: 30
+            value: "{{ (ziel_soll | int) * 100 }}"
+      default:
+        - action: homeassistant.update_entity
+          target:
+            entity_id: sensor.mitsubishi_wp_vorlauftemperatur
+    - choose:
+      - conditions:
+        - condition: template
+          value_template: "{{ is_state('input_boolean.wp_boost_aktiv', 'on') or is_state('binary_sensor.wp_ladewaechter', 'on') }}"
+        sequence:
+        - target:
+            entity_id: switch.wp_thermostat_in_1
+          action: switch.turn_on
+      - conditions:
+        - condition: template
+          value_template: "{{ is_state('input_boolean.wp_boost_aktiv', 'off') and is_state('binary_sensor.wp_ladewaechter', 'off') }}"
+        sequence:
+        - target:
+            entity_id: switch.wp_thermostat_in_1
+          action: switch.turn_off
+
+  - id: wp_takten_erkennung
+    alias: "WP Takten Erkennung"
+    description: "Erkennt Kurzzyklen mit Ursachen-Diagnose (V4.0 Defrost-Safe)"
+    mode: single
+    triggers:
+    - entity_id: sensor.mitsubishi_wp_warmepumpe_frequenz
+      above: 0
+      trigger: numeric_state
+    actions:
+    - delay: "00:01:05"
+    - variables:
+        start_betriebsart: "{{ states('sensor.mitsubishi_wp_betriebsart') }}"
+        start_vorlauf: "{{ states('sensor.mitsubishi_wp_vorlauftemperatur') | float(0) }}"
+        start_ruecklauf: "{{ states('sensor.mitsubishi_wp_rucklauftemperatur') | float(0) }}"
+        start_tww: "{{ states('sensor.mitsubishi_wp_isttemperatur_wasserspeicher_tww') | float(0) }}"
+        start_durchfluss: "{{ states('sensor.mitsubishi_wp_durchflussmenge') | float(0) }}"
+        start_defrost: "{{ states('sensor.mitsubishi_wp_abtaubetrieb_raw') }}"
+        start_shelly_in1: "{{ states('switch.wp_thermostat_in_1') }}"
+        start_zeit: "{{ now() }}"
+    - wait_for_trigger:
+      - entity_id: sensor.mitsubishi_wp_warmepumpe_frequenz
+        below: 1
+        trigger: numeric_state
+      timeout: "01:00:00"
+      continue_on_timeout: false
+    - variables:
+        laufzeit_minuten: "{{ ((as_timestamp(now()) - as_timestamp(start_zeit)) / 60) | round(1) }}"
+        ende_vorlauf: "{{ states('sensor.mitsubishi_wp_vorlauftemperatur') | float(0) }}"
+        ende_ruecklauf: "{{ states('sensor.mitsubishi_wp_rucklauftemperatur') | float(0) }}"
+        ende_durchfluss: "{{ states('sensor.mitsubishi_wp_durchflussmenge') | float(0) }}"
+        ende_defrost: "{{ states('sensor.mitsubishi_wp_abtaubetrieb_raw') }}"
+        spreizung: "{{ (ende_vorlauf - ende_ruecklauf) | round(1) }}"
+        diagnose: >
+          {% if start_defrost in ['Abtauung', 'Defrost', '2'] or ende_defrost in ['Abtauung', 'Defrost', '2'] %}
+            ❄️ Abtauvorgang — kein Fehler
+          {% elif start_betriebsart in ['Warmwasser', '1'] %}
+            🔵 TWW-Nachheizung (Speicher {{ start_tww }}→{{ states('sensor.mitsubishi_wp_isttemperatur_wasserspeicher_tww') }}°C)
+          {% elif ende_durchfluss < 1 %}
+            🔴 Kein Durchfluss! Pumpe oder Ventile prüfen
+          {% elif spreizung < 1 %}
+            🔴 Hydraulischer Kurzschluss! (Spreizung {{ spreizung }}°C)
+          {% elif laufzeit_minuten | float < 5 %}
+            🔴 Laufzeit zu kurz ({{ laufzeit_minuten }} Min)
+          {% else %}
+            ⚪ Normaler Stopp
+          {% endif %}
+    - condition: template
+      value_template: "{{ laufzeit_minuten | float < 5 and start_defrost not in ['Abtauung', 'Defrost', '2'] and ende_defrost not in ['Abtauung', 'Defrost', '2'] }}"
+    - action: notify.persistent_notification
+      data:
+        title: "⚠️ WP Kurzzyklus erkannt"
+        message: >
+          Dauer: {{ laufzeit_minuten }} Min. 
+          Diagnose: {{ diagnose }}
+          Shelly IN1: {{ start_shelly_in1 }}
+          Start: {{ start_zeit | as_timestamp | timestamp_custom('%H:%M:%S') }}
+    - action: counter.increment
+      target:
+        entity_id: counter.wp_kurzzyklen_heute
+
+  - id: wp_fehlercode_benachrichtigung
+    alias: "WP Diagnose - Fehlercode erkannt"
+    triggers:
+    - entity_id: sensor.mitsubishi_wp_fehlercode_gateway_raw
+      to: ~
+      trigger: state
+    conditions:
+    - condition: template
+      value_template: "{{ trigger.to_state.state | int != 32768 }}"
+    actions:
+    - action: notify.persistent_notification
+      data:
+        title: "🚨 WP Modbus Fehlercode"
+        message: >
+          Der Mitsubishi A1M-Gateway meldet den Fehlercode: {{ trigger.to_state.state }}
+          (6999 = Kommunikationsverlust zum FTC6 Mainboard)
+    mode: single
+
+  - id: wp_modbus_drift_alarm
+    alias: "WP Diagnose - Modbus Drift erkannt"
+    triggers:
+    - entity_id: sensor.wp_rueckkanal_status
+      to: '🔴 Drift / asynchron'
+      for:
+        minutes: 20
+      trigger: state
+    actions:
+    - action: notify.persistent_notification
+      data:
+        title: "🚨 WP Modbus Drift!"
+        message: >
+          Die Wärmepumpe ignoriert den Home Assistant Sollwert.
+          HA verlangt: {{ states('sensor.wp_puffer_soll_dynamisch') }}°C (Dynamisch)
+          FTC6 Echo antwortet: {{ states('sensor.mitsubishi_wp_solltemperatur_wasserspeicher_tww') }}°C
+    mode: single
+
+  - id: wp_heizstab_ueberwachung
+    alias: "WP Diagnose - Heizstab aktiv"
+    description: "Meldet sofort, wenn der FTC6 den Heizstab zuschaltet"
+    mode: single
+    triggers:
+    - entity_id: sensor.wp_heizstab_gesamt
+      above: 500
+      for:
+        minutes: 1
+      trigger: numeric_state
+    actions:
+    - action: notify.persistent_notification
+      data:
+        title: "🔥 WP Heizstab ist EINGESCHALTET!"
+        message: >
+          Warnung: Die Ecodan hat den Elektro-Heizstab zugeschaltet.
+          Aktuelle Leistung: {{ (states('sensor.wp_heizstab_gesamt') | float(0) / 1000) | round(1) }} kW!
+          Gefordertes Ziel: {{ states('sensor.wp_puffer_soll_dynamisch') }} °C (Dynamisch)
+          Ist-Wert TWW: {{ states('sensor.mitsubishi_wp_isttemperatur_wasserspeicher_tww') }} °C
+
+  # =========================================================
+  # ---> NEUE AUTOMATIONEN: PREIS-INTELLIGENZ & URLAUB
+  # =========================================================
+  - id: wp_soll_dynamisch_anpassen_test
+    alias: "TEST: WP - Dynamische Soll-Temperatur"
+    description: "Signalisiert Soll-Anpassung, schreibt aber noch NICHT auf den Modbus"
+    trigger:
+      - platform: state
+        entity_id: sensor.wp_puffer_soll_dynamisch
+    condition:
+      - condition: state
+        entity_id: input_boolean.wp_boost_aktiv
+        state: 'off'
+      - condition: template
+        value_template: "{{ states('sensor.mitsubishi_wp_fehlercode_gateway_raw') not in ['unavailable', 'unknown'] }}"
+      - condition: template
+        value_template: "{{ states('sensor.mitsubishi_wp_isttemperatur_wasserspeicher_tww') not in ['unavailable', 'unknown'] }}"
+    action:
+      - action: notify.persistent_notification
+        data:
+          title: "🤖 Puffer-Soll angepasst"
+          message: >
+            🎯 Strategie: {{ states('sensor.wp_strategie') }}
+            💰 Preis: {{ states('sensor.aktueller_strompreis') }} ct/kWh
+            ☀️ Purer PV-Überschuss: {{ ((states('sensor.pv_power') | float(0) * 1000) - (states('sensor.load_power') | float(0) * 1000)) | round(0) }} W
+            🌡️ Puffer Ist: {{ states('sensor.mitsubishi_wp_isttemperatur_wasserspeicher_tww') }}°C
+            🎯 NEUES PUFFER ZIEL: {{ states('sensor.wp_puffer_soll_dynamisch') }}°C
+    mode: single
+
+  - id: wp_urlaubsmodus_wechsel
+    alias: "WP - Urlaubsmodus Ändern"
+    trigger:
+      - platform: state
+        entity_id: input_select.wp_urlaubsmodus
+    action:
+      - choose:
+          - conditions:
+              - condition: state
+                entity_id: input_select.wp_urlaubsmodus
+                state: "Sommer-Urlaub (WP AUS)"
+            sequence:
+              - action: modbus.write_register
+                data:
+                  hub: mitsubishi-a1m
+                  unit: 1
+                  address: 26
+                  value: 0
+              - action: notify.persistent_notification
+                data:
+                  title: "🏖️ Sommer-Urlaub aktiv"
+                  message: "Wärmepumpe ist komplett AUSGESSCHALTET (Achtung: Kein Frostschutz!)."
+
+          - conditions:
+              - condition: state
+                entity_id: input_select.wp_urlaubsmodus
+                state: "Winter-Urlaub (Minimal 45°C)"
+            sequence:
+              - action: modbus.write_register
+                data:
+                  hub: mitsubishi-a1m
+                  unit: 1
+                  address: 26
+                  value: 2
+              - action: notify.persistent_notification
+                data:
+                  title: "❄️ Winter-Urlaub aktiv"
+                  message: "WP läuft auf Minimum (45°C Puffer). Haus kühlt nicht völlig aus."
+
+          - conditions:
+              - condition: state
+                entity_id: input_select.wp_urlaubsmodus
+                state: "Normalbetrieb"
+            sequence:
+              - action: modbus.write_register
+                data:
+                  hub: mitsubishi-a1m
+                  unit: 1
+                  address: 26
+                  value: 2
+              - action: notify.persistent_notification
+                data:
+                  title: "🏠 Normalbetrieb hergestellt"
+                  message: "Wärmepumpe heizt wieder normal (50°C Soll)."
+
+  - id: wp_urlaub_rueckkehr_automatik
+    alias: "WP - Urlaub Rückkehrvorbereitung 24h"
+    trigger:
+      - platform: time
+        at: "12:00:00"
+    condition:
+      - condition: template
+        value_template: "{{ states('input_select.wp_urlaubsmodus') != 'Normalbetrieb' }}"
+      - condition: template
+        value_template: >
+          {% set rueckkehr = as_datetime(states('input_datetime.wp_urlaub_rueckkehr')).date() %}
+          {% set morgen = (now() + timedelta(days=1)).date() %}
+          {{ rueckkehr == morgen }}
+    action:
+      - action: input_select.select_option
+        target:
+          entity_id: input_select.wp_urlaubsmodus
+        data:
+          option: "Normalbetrieb"
+      - action: notify.persistent_notification
+        data:
+          title: "⏰ Willkommen zurück (Morgen)!"
+          message: "Das Haus wird nun vorgeheizt. Der Urlaubsmodus wurde automatisch beendet."
+
+  - id: zappi_default_eco_plus
+    alias: "Zappi - Sicherheit beim Anstecken (ECO +)"
+    description: "Verhindert versehentliches FAST-Entladen der Hausbatterie am Tag"
+    mode: single
+    triggers:
+    - trigger: state
+      entity_id: sensor.zappi_plug_status
+      to: 'Connected'
+    conditions:
+    - condition: time
+      after: '06:00:00'
+      before: '20:00:00'
+    actions:
+    - action: select.select_option
+      target:
+        entity_id: select.zappi_charge_mode
+      data:
+        option: 'ECO +'
+
+  - id: foxess_zappi_kopplung
+    alias: "FoxESS Batterie Schutz - dynamische Kopplung an Zappi FAST"
+    description: "Friert Hausbatterie ein, wenn Zappi im FAST Modus lädt"
+    mode: restart
+    triggers:
+    - trigger: state
+      entity_id: sensor.zappi_plug_status
+    - trigger: state
+      entity_id: select.zappi_charge_mode
+    actions:
+    - if:
+      - condition: state
+        entity_id: sensor.zappi_plug_status
+        state: 'Charging'
+      - condition: state
+        entity_id: select.zappi_charge_mode
+        state: 'FAST'
+      then:
+      - action: select.select_option
+        target:
+          entity_id: select.work_mode
+        data:
+          option: 'Back-up'
+      else:
+      - action: select.select_option
+        target:
+          entity_id: select.work_mode
+        data:
+          option: 'Self Use'
+
+  # ==========================================
+  # WP NACHTABSENKUNG (SZENE-SNAPSHOT)
+  # ==========================================
+  - id: wp_nachtabsenkung_start
+    alias: "WP Nachtabsenkung Start (21 Uhr)"
+    triggers:
+    - at: '21:00:00'
+      trigger: time
+    actions:
+    - action: scene.create
+      data:
+        scene_id: wp_nab_st1
+        snapshot_entities: climate.thermostat_1
+    - action: scene.create
+      data:
+        scene_id: wp_nab_st2
+        snapshot_entities: climate.thermostat_2
+    - action: scene.create
+      data:
+        scene_id: wp_nab_st3
+        snapshot_entities: climate.thermostat_3
+    - action: scene.create
+      data:
+        scene_id: wp_nab_st4
+        snapshot_entities: climate.thermostat_4
+    - action: scene.create
+      data:
+        scene_id: wp_nab_st5
+        snapshot_entities: climate.t_kuche_eg
+    - action: scene.create
+      data:
+        scene_id: wp_nab_st6
+        snapshot_entities: climate.thermostat_buro
+    - action: scene.create
+      data:
+        scene_id: wp_nab_st7
+        snapshot_entities: climate.thermostat_5
+    - action: scene.create
+      data:
+        scene_id: wp_nab_st8
+        snapshot_entities: climate.thermostat_6
+    - delay: "00:00:05"
+    - action: climate.set_temperature
+      data:
+        temperature: 19
+      target:
+        entity_id: climate.thermostat_1
+    - delay: "00:15:00"
+    - action: climate.set_temperature
+      data:
+        temperature: 19
+      target:
+        entity_id: climate.thermostat_2
+    - delay: "00:15:00"
+    - action: climate.set_temperature
+      data:
+        temperature: 19
+      target:
+        entity_id: climate.thermostat_3
+    - delay: "00:15:00"
+    - action: climate.set_temperature
+      data:
+        temperature: 19
+      target:
+        entity_id: climate.thermostat_4
+    - delay: "00:15:00"
+    - action: climate.set_temperature
+      data:
+        temperature: 19
+      target:
+        entity_id: climate.t_kuche_eg
+    - delay: "00:15:00"
+    - action: climate.set_temperature
+      data:
+        temperature: 19
+      target:
+        entity_id: climate.thermostat_buro
+    - delay: "00:15:00"
+    - action: climate.set_temperature
+      data:
+        temperature: 19
+      target:
+        entity_id: climate.thermostat_5
+    - delay: "00:15:00"
+    - action: climate.set_temperature
+      data:
+        temperature: 19
+      target:
+        entity_id: climate.thermostat_6
+    mode: single
+
+  - id: wp_nachtabsenkung_ende
+    alias: "WP Nachtabsenkung Ende (04 Uhr)"
+    triggers:
+    - at: '04:00:00'
+      trigger: time
+    actions:
+    - action: scene.turn_on
+      target:
+        entity_id: scene.wp_nab_st1
+    - delay: "00:15:00"
+    - action: scene.turn_on
+      target:
+        entity_id: scene.wp_nab_st2
+    - delay: "00:15:00"
+    - action: scene.turn_on
+      target:
+        entity_id: scene.wp_nab_st3
+    - delay: "00:15:00"
+    - action: scene.turn_on
+      target:
+        entity_id: scene.wp_nab_st4
+    - delay: "00:15:00"
+    - action: scene.turn_on
+      target:
+        entity_id: scene.wp_nab_st5
+    - delay: "00:15:00"
+    - action: scene.turn_on
+      target:
+        entity_id: scene.wp_nab_st6
+    - delay: "00:15:00"
+    - action: scene.turn_on
+      target:
+        entity_id: scene.wp_nab_st7
+    - delay: "00:15:00"
+    - action: scene.turn_on
+      target:
+        entity_id: scene.wp_nab_st8
+    mode: single

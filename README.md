@@ -548,4 +548,5 @@ Aussagekräftiger als der Momentanwert, da er Anlauf- und Abtauphasen mittelt.
 
 ## Lizenz
 
-Dieses Projekt steht unter der [MIT-Lizenz](LICENSE).
+Dieses Projekt steht unter der **Creative Commons Attribution-NonCommercial 4.0 International (CC BY-NC 4.0)** Lizenz. 
+Eine kommerzielle Nutzung oder der Verkauf dieses Codes (z.B. durch Installateure) ist ohne ausdrückliche Genehmigung des Urhebers untersagt. Details siehe [LICENSE](LICENSE).

@@ -13,7 +13,7 @@ Automatische PV-Überschuss-Steuerung für Mitsubishi Ecodan Wärmepumpen mit Ho
 ```text
 ┌─────────────────┐     ┌──────────────────┐     ┌─────────────────┐
 │   PV-Anlage     │────▶│ FoxESS H3-Pro    │────▶│   Batterie      │
-│   14,5 kWp      │     │ Wechselrichter   │     │ FoxESS ESC 2900 │
+│   14,5 kWp      │     │ WR + Elfin-ew11a │     │ FoxESS ESC 2900 │
 └─────────────────┘     └──────┬───────────┘     │ 17,28 kWh       │
                                │                  └─────────────────┘
                                │ PV-Daten via HA
@@ -60,6 +60,7 @@ Die Ecodan speist in einen Puffer. An diesem Puffer hängt eine TWL/Oventrop Fri
 | **WP Thermostat-Relais** | Shelly 1 Mini Gen4 | `switch.wp_thermostat_in_1` (IP: 192.168.178.106) |
 | **WP Verbrauchsmessung** | Shelly Pro 3EM | `sensor.shellypro3em_e08cfe95cbe0_phase_a_leistung` |
 | **Zappi EV Charger** | myenergi Zappi | `sensor.myenergi_zappi_15553841_plug_status` (Kuga) |
+| **PV & Batterie** | FoxESS H3-Pro + Elfin-ew11a | via HA Integration (Modbus/TCP) |
 | **Räume** | Tuya/Moes ST1820 | `climate.st1820_80b54e38809c`, `st1820_b08184f2dbc8`, `b08184f4860c` udglm. |
 | **Räume (Küche/Büro)** | Thermostate | `climate.t_kuche_eg`, `climate.thermostat_buro` |
 

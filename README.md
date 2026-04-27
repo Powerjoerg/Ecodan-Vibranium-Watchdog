@@ -34,8 +34,8 @@ Automatische PV-Überschuss-Steuerung für Mitsubishi Ecodan Wärmepumpen mit Ho
 ┌─────────────────┐     ┌──────────────────┐     ┌─────────────────┐
 │   PV-Anlage     │────▶│ FoxESS H3-Pro    │────▶│   Batterie      │
 │   14,5 kWp      │     │ Wechselrichter   │     │ FoxESS ESC 2900 │
-└─────────────────┘     └──────┬───────────┘     │ 17,28 kWh       │
-                               │                  └─────────────────┘
+└─────────────────┘     │ + Elfin-ew11a    │     │ 17,28 kWh       │
+                        └──────┬───────────┘     └─────────────────┘
                                │ PV-Daten via HA
                                ▼
 ┌─────────────────┐     ┌──────────────────┐     ┌─────────────────┐
@@ -69,6 +69,7 @@ Automatische PV-Überschuss-Steuerung für Mitsubishi Ecodan Wärmepumpen mit Ho
 | **WP-Verbrauchsmessung** | Shelly Pro 3EM (SPEM-003CEBEU) | 3× CT-Klemmen im Sicherungskasten |
 | **Thermostat-Steuerung** | Shelly 1 Mini Gen3 | Potentialfreier Kontakt an IN1 (Zone 1) zur Heizungssteuerung |
 | **Wechselrichter** | FoxESS H3-Pro-15.0 | Hybrid-Wechselrichter |
+| **PV-Gateway** | Elfin-ew11a | Modbus/TCP Gateway am FoxESS Wechselrichter |
 | **Batterie** | FoxESS ESC 2900-2 | 17,28 kWh Speicherkapazität |
 | **PV-Anlage** | — | 14,5 kWp |
 | **Home Assistant** | Raspberry Pi 5 | rpi5-64, HA OS |

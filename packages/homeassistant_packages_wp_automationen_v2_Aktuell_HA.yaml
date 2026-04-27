@@ -2,6 +2,10 @@
 # MITSUBISHI ECODAN WP PACKAGE - VIBRANIUM ULTRA KOMPLETT
 # INKLUSIVE MODBUS A1M HARDWARE, TEMPLATES UND AUTOMATIONEN
 # PLUS: DYNAMISCHES ENERGIEMANAGEMENT & URLAUBSMODUS V3
+#
+# --- VERSIONS-HISTORIE ---
+# 🟢 AKTUELL: 26.04.2026 - 18:00 Uhr (V4.5.3 - 25C Zwangsschlaf Fix gegen Sniffing-Kurzstarts)
+# 🔴 ERSETZT: 25.04.2026 - 12:55 Uhr (V4.5.2 - God-Mode Forensik für FTC6 Autonome Checks)
 # ==============================================================================
 # 
 # 🚨 DIE 4 GOLDENEN REGELN (NIEMALS BRECHEN!) 🚨
@@ -94,6 +98,20 @@ counter:
   wp_kurzzyklen_heute:
     name: "WP Kurzzyklen Heute"
     icon: mdi:alert-circle-outline
+
+utility_meter:
+  wp_tagesverbrauch_kategorisiert:
+    source: sensor.shellypro3em_e08cfe95cbe0_total_active_energy
+    name: "WP Tagesverbrauch Kategorisiert"
+    cycle: daily
+    tariffs:
+      - pflicht_betrieb
+      - luxus_boost
+
+  hausbedarf_taeglich_bereinigt:
+    source: sensor.hausbedarf_heute_bereinigt
+    name: "Hausbedarf Taeglich Bereinigt"
+    cycle: daily
 
 modbus:
   - name: mitsubishi-a1m
@@ -512,12 +530,8 @@ template:
             {% set soll = 15 %}
           {% elif urlaub == 'Winter-Urlaub (Minimal 45°C)' %}
             {% set soll = 45 %}
-          {% elif is_state('input_boolean.wp_boost_aktiv', 'on') %}
-            {% set soll = 55 %}
-          {% elif is_state('binary_sensor.wp_ladewaechter', 'on') %}
-            {% set soll = 50 %}
           {% else %}
-            {% set soll = 40 %}
+            {% set soll = states('sensor.wp_puffer_soll_dynamisch') | float(40) %}
           {% endif %}
           {% set echo = states('sensor.mitsubishi_wp_solltemperatur_wasserspeicher_tww') | float(0) %}
           {{ (echo - soll) | round(1) }}
@@ -639,6 +653,21 @@ template:
           {% endif %}
 
       # =========================================================
+      # ---> V5.0 MPC KÖNIGSMACHER-SENSOREN (GORDISCHER KNOTEN)
+      # =========================================================
+      - name: "Hausbedarf Heute Bereinigt"
+        unique_id: hausbedarf_heute_bereinigt
+        unit_of_measurement: "kWh"
+        device_class: energy
+        state_class: total
+        state: >
+          {% set foxess_total = states('sensor.foxess_load_energy_today') | float(0) %}
+          {% set zappi_total = states('sensor.myenergi_zappi_15553841_energy_today') | float(0) %}
+          {% set wp_luxus = states('sensor.wp_tagesverbrauch_kategorisiert_luxus_boost') | float(0) %}
+          {% set bereinigt = foxess_total - zappi_total - wp_luxus %}
+          {{ bereinigt if bereinigt > 0 else 0 }}
+
+      # =========================================================
       # ---> NEUE SENSOREN: DYNAMISCHER STROM (TIBBER/RABOT)
       # =========================================================
       - name: "Aktueller Strompreis"
@@ -702,27 +731,20 @@ template:
         device_class: temperature
         icon: mdi:thermometer-auto
         state: >
-          {% set strategie = states('sensor.wp_strategie') %}
-          {% set preis = states('sensor.aktueller_strompreis') | float(25) %}
           {% set puffer_ist = states('sensor.mitsubishi_wp_isttemperatur_wasserspeicher_tww') | float(45) %}
           
-          {# Failsafe-Redundanz (Greift erst, falls Watchdog/Ladewaechter bei 40°C versagt haben) #}
+          {# Schritt 1: Absolutes Ziel-Soll berechnen #}
           {% if puffer_ist < 38 %}
-            50
-          {# Spar-Strategien MÜSSEN vor den absoluten Preisen kommen! #}
-          {% elif strategie in ['SPAREN_FUER_MORGEN', 'SPAREN_FUER_MITTAG'] %}
-            42
-          {% elif strategie == 'BILLIGSTE_STUNDE_JETZT' or preis <= 10 %}
-            60
-          {% elif preis <= 15 %}
-            55
-          {% elif preis <= 20 %}
-            50
-          {% elif preis <= 28 %}
-            48
+            {% set ziel_max = 50 %}
+          {% elif is_state('input_boolean.wp_boost_aktiv', 'on') %}
+            {% set ziel_max = 55 %}
+          {% elif is_state('binary_sensor.wp_ladewaechter', 'on') %}
+            {% set ziel_max = 50 %}
           {% else %}
-            40
+            {% set ziel_max = 15 %}
           {% endif %}
+
+          {{ ziel_max }}
 
       # =========================================================
       # ---> NEUE SENSOREN: URLAUBSMODUS
@@ -746,7 +768,7 @@ template:
       - name: "WP Ladewaechter"
         unique_id: wp_ladewaechter
         state: >
-          {% set current_state = is_state('binary_sensor.wp_ladewaechter', 'on') %}
+          {% set current_state = (this.state == 'on') %}
           {% set raw_temp = states('sensor.mitsubishi_wp_isttemperatur_wasserspeicher_tww') %}
           
           {% if raw_temp in ['unavailable', 'unknown', 'none'] %}
@@ -768,7 +790,7 @@ template:
             {# V4.0 Spike-Filter: Ignoriere Modbus-Geisterwerte über 80°C oder unter 5°C #}
             {% if temp > 80 or temp < 5 %}
               {{ current_state }}
-            {% elif temp < 40 %}
+            {% elif temp < 41 %}
               true
             {% elif temp >= (target - 0.8) %}
               false
@@ -776,6 +798,39 @@ template:
               {{ current_state }}
             {% endif %}
           {% endif %}
+
+      # --- V5.0 MPC PV Prognose & Preis (Königsmacher) ---
+      - name: "MPC PV Prognose Freigabe"
+        unique_id: mpc_pv_prognose_freigabe
+        device_class: battery_charging
+        state: >
+          {# 1. Akku Lücke berechnen #}
+          {% set soc = states('sensor.battery_soc_1') | float(0) %}
+          {% set kapazitaet = 10.0 %} {# FoxESS Kapazität in kWh anpassen #}
+          {% set luecke_kwh = ((100 - soc) / 100) * kapazitaet %}
+          
+          {# 2. Hausbedarf von gestern abrufen (Utility Meter Attribut) #}
+          {% set haus_gestern = state_attr('sensor.hausbedarf_taeglich_bereinigt', 'last_period') | float(10) %}
+          
+          {# 3. Pflicht-Bedarf Gesamt #}
+          {% set pflicht_bedarf = luecke_kwh + haus_gestern %}
+          
+          {# 4. PV Prognose für heute #}
+          {% set prognose = states('sensor.solar_prognose_heute') | float(0) %}
+          
+          {{ prognose > pflicht_bedarf }}
+
+      - name: "MPC Preis Prognose Freigabe"
+        unique_id: mpc_preis_prognose_freigabe
+        state: >
+          {% set preis = states('sensor.aktueller_strompreis') | float(25) %}
+          {% set prognose_morgen = states('input_number.dummy_solar_prognose') | float(30) %} {# Platzhalter für morgige Prognose #}
+          {% set stunde = now().hour %}
+          
+          {# Szenario B: Nachts, billig (<15ct) und morgen schlechtes Wetter (<15kWh) #}
+          {{ (preis < 15 or states('sensor.wp_strategie') == 'BILLIGSTE_STUNDE_JETZT') 
+             and prognose_morgen < 15 
+             and stunde >= 1 and stunde <= 5 }}
 
       # --- Haus Heizbedarf (Sammelt alle Einzelraum-Ventile) ---
       - name: "Haus Heizbedarf"
@@ -812,7 +867,16 @@ template:
       - name: "WP PV Boost Freigabe"
         unique_id: wp_pv_boost_freigabe
         state: >
-          {{ states('sensor.feed_in') | float(0) > 1200 and states('sensor.battery_soc_1') | float(0) > 50 }}
+          {% set feed_in = states('sensor.feed_in') | float(0) %}
+          {% set soc = states('sensor.battery_soc_1') | float(0) %}
+          
+          {# Standard 60% Hürde #}
+          {% set standard = (feed_in > 1200 and soc >= 60) %}
+          
+          {# Szenario A: MPC Forecast Bypass #}
+          {% set mpc_bypass = is_state('binary_sensor.mpc_pv_prognose_freigabe', 'on') and feed_in > 1200 %}
+          
+          {{ standard or mpc_bypass }}
         delay_on: "00:05:00"
         delay_off: "00:05:00"
 
@@ -826,7 +890,7 @@ template:
       - name: "WP Boost Abbruch Batterie"
         unique_id: wp_boost_abbruch_batterie
         state: >
-          {{ states('sensor.battery_soc_1') | float(100) < 70 }}
+          {{ states('sensor.battery_soc_1') | float(100) < 50 }}
         delay_on: "00:05:00"
         delay_off: "00:05:00"
 
@@ -861,7 +925,7 @@ automation:
       above: 5
       for:
         minutes: 1
-      trigger: numeric_state
+      platform: numeric_state
     actions:
     - target:
         entity_id: counter.wp_starts_heute
@@ -873,7 +937,7 @@ automation:
     description: "Setzt die WP-Zähler jeden Tag um Mitternacht zurück"
     triggers:
     - at: '00:00:00'
-      trigger: time
+      platform: time
     actions:
     - target:
         entity_id: counter.wp_starts_heute
@@ -892,7 +956,7 @@ automation:
     triggers:
     - entity_id: sensor.mitsubishi_wp_abtaubetrieb_raw
       to: '2'
-      trigger: state
+      platform: state
     actions:
     - target:
         entity_id: counter.wp_abtauzyklen_heute
@@ -948,25 +1012,25 @@ automation:
     description: "Setzt Boost Flag auf OFF (Zuhören auf Panzer-Helfer für Cockpit-Anzeige)"
     triggers:
     - at: '21:00:00'
-      trigger: time
+      platform: time
     - entity_id: input_boolean.wp_boost_freigabe
       to: 'off'
-      trigger: state
+      platform: state
     - entity_id: binary_sensor.wp_boost_abbruch_batterie
       to: 'on'
-      trigger: state
+      platform: state
     - entity_id: binary_sensor.wp_boost_abbruch_pv
       to: 'on'
-      trigger: state
+      platform: state
     - entity_id: binary_sensor.wp_boost_ziel_erreicht
       to: 'on'
-      trigger: state
+      platform: state
     # Hard-Fail-Safe (Falls 55 wirklich mechanisch gerissen werden / Software-Stopp)
     - entity_id: sensor.mitsubishi_wp_isttemperatur_wasserspeicher_tww
       above: 54.0
       for:
         minutes: 1
-      trigger: numeric_state
+      platform: numeric_state
     conditions:
     - condition: state
       entity_id: input_boolean.wp_boost_aktiv
@@ -988,7 +1052,7 @@ automation:
       above: 1400
       for:
         minutes: 5
-      trigger: numeric_state
+      platform: numeric_state
     conditions:
     - condition: template
       value_template: >
@@ -1067,11 +1131,11 @@ automation:
     max: 5
     triggers:
     - entity_id: input_boolean.wp_boost_aktiv
-      trigger: state
+      platform: state
     - entity_id: binary_sensor.wp_ladewaechter
-      trigger: state
+      platform: state
     - entity_id: sensor.wp_puffer_soll_dynamisch
-      trigger: state
+      platform: state
     actions:
     - event: wp_control_dirty_flag
 
@@ -1080,11 +1144,11 @@ automation:
     description: "Write-On-Change für Reg30 + 5-Minuten Read Keep-Alive"
     mode: single
     triggers:
-    - trigger: homeassistant
+    - platform: homeassistant
       event: start
-    - trigger: time_pattern
+    - platform: time_pattern
       minutes: "/5"
-    - trigger: event
+    - platform: event
       event_type: wp_control_dirty_flag
     conditions:
     - condition: template
@@ -1097,24 +1161,32 @@ automation:
             15
           {% elif urlaub == 'Winter-Urlaub (Minimal 45°C)' %}
             45
-          {% elif is_state('input_boolean.wp_boost_aktiv', 'on') %}
-            55
-          {% elif is_state('binary_sensor.wp_ladewaechter', 'on') %}
-            50
           {% else %}
-            40
+            {{ states('sensor.wp_puffer_soll_dynamisch') | int(40) }}
           {% endif %}
-        aktuelles_echo: "{{ states('sensor.mitsubishi_wp_solltemperatur_wasserspeicher_tww') | float(0) }}"
+        aktuelles_echo_tww: "{{ states('sensor.mitsubishi_wp_solltemperatur_wasserspeicher_tww') | float(0) }}"
+        aktuelles_echo_hk: "{{ states('sensor.mitsubishi_wp_temperaturregler_solltemperatur_heizkreis_1') | float(0) }}"
     - choose:
       - conditions:
         - condition: template
-          value_template: "{{ (ziel_soll | float) != aktuelles_echo }}"
+          value_template: "{{ (ziel_soll | float) != aktuelles_echo_tww }}"
         sequence:
         - action: modbus.write_register
           data:
             hub: mitsubishi-a1m
             unit: 1
             address: 30
+            value: "{{ (ziel_soll | int) * 100 }}"
+    - choose:
+      - conditions:
+        - condition: template
+          value_template: "{{ (ziel_soll | float) != aktuelles_echo_hk }}"
+        sequence:
+        - action: modbus.write_register
+          data:
+            hub: mitsubishi-a1m
+            unit: 1
+            address: 55
             value: "{{ (ziel_soll | int) * 100 }}"
       default:
         - action: homeassistant.update_entity
@@ -1131,6 +1203,9 @@ automation:
       - conditions:
         - condition: template
           value_template: "{{ is_state('input_boolean.wp_boost_aktiv', 'off') and is_state('binary_sensor.wp_ladewaechter', 'off') }}"
+        - condition: template
+          value_template: >
+            {{ (now() - states.binary_sensor.wp_ladewaechter.last_changed).total_seconds() > 300 }}
         sequence:
         - target:
             entity_id: switch.wp_thermostat_in_1
@@ -1138,13 +1213,15 @@ automation:
 
   - id: wp_takten_erkennung
     alias: "WP Takten Erkennung"
-    description: "Erkennt Kurzzyklen mit Ursachen-Diagnose (V4.0 Defrost-Safe)"
+    description: "Erkennt Kurzzyklen mit Ursachen-Diagnose (V4.1 God-Mode)"
     mode: single
     triggers:
     - entity_id: sensor.mitsubishi_wp_warmepumpe_frequenz
       above: 0
-      trigger: numeric_state
+      platform: numeric_state
     actions:
+    - variables:
+        trigger_shelly_in1: "{{ states('switch.wp_thermostat_in_1') }}"
     - delay: "00:01:05"
     - variables:
         start_betriebsart: "{{ states('sensor.mitsubishi_wp_betriebsart') }}"
@@ -1153,12 +1230,11 @@ automation:
         start_tww: "{{ states('sensor.mitsubishi_wp_isttemperatur_wasserspeicher_tww') | float(0) }}"
         start_durchfluss: "{{ states('sensor.mitsubishi_wp_durchflussmenge') | float(0) }}"
         start_defrost: "{{ states('sensor.mitsubishi_wp_abtaubetrieb_raw') }}"
-        start_shelly_in1: "{{ states('switch.wp_thermostat_in_1') }}"
         start_zeit: "{{ now() }}"
     - wait_for_trigger:
       - entity_id: sensor.mitsubishi_wp_warmepumpe_frequenz
         below: 1
-        trigger: numeric_state
+        platform: numeric_state
       timeout: "01:00:00"
       continue_on_timeout: false
     - variables:
@@ -1177,6 +1253,8 @@ automation:
             🔴 Kein Durchfluss! Pumpe oder Ventile prüfen
           {% elif spreizung < 1 %}
             🔴 Hydraulischer Kurzschluss! (Spreizung {{ spreizung }}°C)
+          {% elif trigger_shelly_in1 == 'off' %}
+            ⚪ Autonomer Hardware-Check (Shelly war OFF)
           {% elif laufzeit_minuten | float < 5 %}
             🔴 Laufzeit zu kurz ({{ laufzeit_minuten }} Min)
           {% else %}
@@ -1190,7 +1268,7 @@ automation:
         message: >
           Dauer: {{ laufzeit_minuten }} Min. 
           Diagnose: {{ diagnose }}
-          Shelly IN1: {{ start_shelly_in1 }}
+          Shelly IN1 (Trigger): {{ trigger_shelly_in1 }}
           Start: {{ start_zeit | as_timestamp | timestamp_custom('%H:%M:%S') }}
     - action: counter.increment
       target:
@@ -1201,7 +1279,7 @@ automation:
     triggers:
     - entity_id: sensor.mitsubishi_wp_fehlercode_gateway_raw
       to: ~
-      trigger: state
+      platform: state
     conditions:
     - condition: template
       value_template: "{{ trigger.to_state.state | int != 32768 }}"
@@ -1221,7 +1299,7 @@ automation:
       to: '🔴 Drift / asynchron'
       for:
         minutes: 20
-      trigger: state
+      platform: state
     actions:
     - action: notify.persistent_notification
       data:
@@ -1241,7 +1319,7 @@ automation:
       above: 500
       for:
         minutes: 1
-      trigger: numeric_state
+      platform: numeric_state
     actions:
     - action: notify.persistent_notification
       data:
@@ -1379,23 +1457,31 @@ automation:
       data:
         option: 'ECO +'
 
-  - id: foxess_zappi_kopplung
-    alias: "FoxESS Batterie Schutz - dynamische Kopplung an Zappi FAST"
-    description: "Friert Hausbatterie ein, wenn Zappi im FAST Modus lädt"
+  - id: mpc_foxess_diebstahlschutz
+    alias: "MPC - FoxESS Diebstahlschutz (Der Türsteher)"
+    description: "Szenario D: Friert Hausbatterie sofort ein, wenn Großverbraucher PV konsumieren"
     mode: restart
     triggers:
     - trigger: state
       entity_id: sensor.myenergi_zappi_15553841_plug_status
     - trigger: state
       entity_id: select.myenergi_zappi_15553841_charge_mode
+    - trigger: state
+      entity_id: input_boolean.wp_boost_aktiv
     actions:
     - if:
-      - condition: state
-        entity_id: sensor.myenergi_zappi_15553841_plug_status
-        state: 'Charging'
-      - condition: state
-        entity_id: select.myenergi_zappi_15553841_charge_mode
-        state: 'FAST'
+      - condition: or
+        conditions:
+          - condition: and
+            conditions:
+              - condition: state
+                entity_id: sensor.myenergi_zappi_15553841_plug_status
+                state: 'Charging'
+              - condition: template
+                value_template: "{{ states('select.myenergi_zappi_15553841_charge_mode') in ['FAST', 'ECO+'] }}"
+          - condition: state
+            entity_id: input_boolean.wp_boost_aktiv
+            state: 'on'
       then:
       - action: select.select_option
         target:
@@ -1409,6 +1495,25 @@ automation:
         data:
           option: 'Self Use'
 
+  - id: wp_tarif_umschalter
+    alias: "MPC - WP Stromzähler Tarif Umschalter"
+    description: "Trennt WP-Strom sauber in Pflicht und Luxus (PV-Boost)"
+    triggers:
+    - trigger: state
+      entity_id: input_boolean.wp_boost_aktiv
+    actions:
+    - action: select.select_option
+      target:
+        entity_id: select.wp_tagesverbrauch_kategorisiert
+      data:
+        option: >
+          {% if trigger.to_state.state == 'on' %}
+            luxus_boost
+          {% else %}
+            pflicht_betrieb
+          {% endif %}
+    mode: single
+
   # ==========================================
   # WP NACHTABSENKUNG (SZENE-SNAPSHOT)
   # ==========================================
@@ -1416,40 +1521,48 @@ automation:
     alias: "WP Nachtabsenkung Start (21 Uhr)"
     triggers:
     - at: '21:00:00'
-      trigger: time
+      platform: time
     actions:
     - action: scene.create
       data:
         scene_id: wp_nab_st1
-        snapshot_entities: climate.st1820_80b54e38809c
+        snapshot_entities:
+          - climate.st1820_80b54e38809c
     - action: scene.create
       data:
         scene_id: wp_nab_st2
-        snapshot_entities: climate.st1820_b08184f2dbc8
+        snapshot_entities:
+          - climate.st1820_b08184f2dbc8
     - action: scene.create
       data:
         scene_id: wp_nab_st3
-        snapshot_entities: climate.st1820_b08184f48e64
+        snapshot_entities:
+          - climate.st1820_b08184f48e64
     - action: scene.create
       data:
         scene_id: wp_nab_st4
-        snapshot_entities: climate.st1820_b08184f67248
+        snapshot_entities:
+          - climate.st1820_b08184f67248
     - action: scene.create
       data:
         scene_id: wp_nab_st5
-        snapshot_entities: climate.t_kuche_eg
+        snapshot_entities:
+          - climate.t_kuche_eg
     - action: scene.create
       data:
         scene_id: wp_nab_st6
-        snapshot_entities: climate.thermostat_buro
+        snapshot_entities:
+          - climate.thermostat_buro
     - action: scene.create
       data:
         scene_id: wp_nab_st7
-        snapshot_entities: climate.st1820_b08184f4860c
+        snapshot_entities:
+          - climate.st1820_b08184f4860c
     - action: scene.create
       data:
         scene_id: wp_nab_st8
-        snapshot_entities: climate.st1820_b08184f5c164
+        snapshot_entities:
+          - climate.st1820_b08184f5c164
     - delay: "00:00:05"
     - action: climate.set_temperature
       data:
@@ -1504,7 +1617,7 @@ automation:
     alias: "WP Nachtabsenkung Ende (04 Uhr)"
     triggers:
     - at: '04:00:00'
-      trigger: time
+      platform: time
     actions:
     - action: scene.turn_on
       target:

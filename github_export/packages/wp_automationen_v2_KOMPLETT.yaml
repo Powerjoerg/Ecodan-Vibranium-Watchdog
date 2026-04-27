@@ -540,14 +540,14 @@ template:
         device_class: power
         state_class: measurement
         state: >
-          {{ states('sensor.shellypro3em_e08cfe95cbe0_phase_a_leistung') | float(0) * 3 }}
+          {{ states('sensor.shelly_wp_phase_a_leistung') | float(0) * 3 }}
 
       - name: "WP Heizstab Gesamt"
         unit_of_measurement: "W"
         device_class: power
         state_class: measurement
         state: >
-          {% set power = states('sensor.shellypro3em_e08cfe95cbe0_phase_b_leistung') | float(0) * 3 %}
+          {% set power = states('sensor.shelly_wp_phase_b_leistung') | float(0) * 3 %}
           {{ power if power > 50 else 0 }}
 
       - name: "WP Innen Gesamt"
@@ -555,16 +555,16 @@ template:
         device_class: power
         state_class: measurement
         state: >
-          {{ states('sensor.shellypro3em_e08cfe95cbe0_phase_c_leistung') | float(0) }}
+          {{ states('sensor.shelly_wp_phase_c_leistung') | float(0) }}
 
       - name: "WP Gesamtverbrauch"
         unit_of_measurement: "W"
         device_class: power
         state_class: measurement
         state: >
-          {{ (states('sensor.shellypro3em_e08cfe95cbe0_phase_a_leistung') | float(0) * 3)
-           + (states('sensor.shellypro3em_e08cfe95cbe0_phase_b_leistung') | float(0) * 3)
-           + (states('sensor.shellypro3em_e08cfe95cbe0_phase_c_leistung') | float(0)) }}
+          {{ (states('sensor.shelly_wp_phase_a_leistung') | float(0) * 3)
+           + (states('sensor.shelly_wp_phase_b_leistung') | float(0) * 3)
+           + (states('sensor.shelly_wp_phase_c_leistung') | float(0)) }}
 
       - name: "WP Waermeleistung"
         unit_of_measurement: "W"
@@ -782,12 +782,12 @@ template:
         unique_id: haus_heizbedarf
         state: >
           {% set thermostats = [
-            'climate.st1820_80b54e38809c',
-            'climate.st1820_b08184f2dbc8',
-            'climate.st1820_b08184f4860c',
-            'climate.st1820_b08184f48e64',
-            'climate.st1820_b08184f5c164',
-            'climate.st1820_b08184f67248',
+            'climate.thermostat_1',
+            'climate.thermostat_2',
+            'climate.thermostat_5',
+            'climate.thermostat_3',
+            'climate.thermostat_6',
+            'climate.thermostat_4',
             'climate.t_kuche_eg',
             'climate.thermostat_buro'
           ] %}
@@ -992,13 +992,13 @@ automation:
     conditions:
     - condition: template
       value_template: >
-        {{ states('sensor.myenergi_zappi_15553841_plug_status') in ['Connected', 'Charging', 'Waiting for EV'] }}
+        {{ states('sensor.zappi_plug_status') in ['Connected', 'Charging', 'Waiting for EV'] }}
     - condition: numeric_state
       entity_id: sensor.battery_soc_1
       above: 80
     actions:
     - target:
-        entity_id: select.myenergi_zappi_15553841_charge_mode
+        entity_id: select.zappi_charge_mode
       data:
         option: ECO+
       action: select.select_option
@@ -1017,10 +1017,10 @@ automation:
     conditions:
     - condition: template
       value_template: >
-        {{ states('sensor.myenergi_zappi_15553841_plug_status') in ['Connected', 'Charging', 'Waiting for EV'] }}
+        {{ states('sensor.zappi_plug_status') in ['Connected', 'Charging', 'Waiting for EV'] }}
     actions:
     - target:
-        entity_id: select.myenergi_zappi_15553841_charge_mode
+        entity_id: select.zappi_charge_mode
       data:
         option: FAST
       action: select.select_option
@@ -1043,14 +1043,14 @@ automation:
       entity_id: sensor.aktueller_strompreis
       above: 20
     - condition: state
-      entity_id: select.myenergi_zappi_15553841_charge_mode
+      entity_id: select.zappi_charge_mode
       state: 'FAST'
     - condition: template
       value_template: >
-        {{ states('sensor.myenergi_zappi_15553841_plug_status') in ['Connected', 'Charging', 'Waiting for EV'] }}
+        {{ states('sensor.zappi_plug_status') in ['Connected', 'Charging', 'Waiting for EV'] }}
     actions:
     - target:
-        entity_id: select.myenergi_zappi_15553841_charge_mode
+        entity_id: select.zappi_charge_mode
       data:
         option: 'ECO+'
       action: select.select_option
@@ -1366,7 +1366,7 @@ automation:
     mode: single
     triggers:
     - trigger: state
-      entity_id: sensor.myenergi_zappi_15553841_plug_status
+      entity_id: sensor.zappi_plug_status
       to: 'Connected'
     conditions:
     - condition: time
@@ -1375,7 +1375,7 @@ automation:
     actions:
     - action: select.select_option
       target:
-        entity_id: select.myenergi_zappi_15553841_charge_mode
+        entity_id: select.zappi_charge_mode
       data:
         option: 'ECO +'
 
@@ -1385,16 +1385,16 @@ automation:
     mode: restart
     triggers:
     - trigger: state
-      entity_id: sensor.myenergi_zappi_15553841_plug_status
+      entity_id: sensor.zappi_plug_status
     - trigger: state
-      entity_id: select.myenergi_zappi_15553841_charge_mode
+      entity_id: select.zappi_charge_mode
     actions:
     - if:
       - condition: state
-        entity_id: sensor.myenergi_zappi_15553841_plug_status
+        entity_id: sensor.zappi_plug_status
         state: 'Charging'
       - condition: state
-        entity_id: select.myenergi_zappi_15553841_charge_mode
+        entity_id: select.zappi_charge_mode
         state: 'FAST'
       then:
       - action: select.select_option
@@ -1421,19 +1421,19 @@ automation:
     - action: scene.create
       data:
         scene_id: wp_nab_st1
-        snapshot_entities: climate.st1820_80b54e38809c
+        snapshot_entities: climate.thermostat_1
     - action: scene.create
       data:
         scene_id: wp_nab_st2
-        snapshot_entities: climate.st1820_b08184f2dbc8
+        snapshot_entities: climate.thermostat_2
     - action: scene.create
       data:
         scene_id: wp_nab_st3
-        snapshot_entities: climate.st1820_b08184f48e64
+        snapshot_entities: climate.thermostat_3
     - action: scene.create
       data:
         scene_id: wp_nab_st4
-        snapshot_entities: climate.st1820_b08184f67248
+        snapshot_entities: climate.thermostat_4
     - action: scene.create
       data:
         scene_id: wp_nab_st5
@@ -1445,35 +1445,35 @@ automation:
     - action: scene.create
       data:
         scene_id: wp_nab_st7
-        snapshot_entities: climate.st1820_b08184f4860c
+        snapshot_entities: climate.thermostat_5
     - action: scene.create
       data:
         scene_id: wp_nab_st8
-        snapshot_entities: climate.st1820_b08184f5c164
+        snapshot_entities: climate.thermostat_6
     - delay: "00:00:05"
     - action: climate.set_temperature
       data:
         temperature: 19
       target:
-        entity_id: climate.st1820_80b54e38809c
+        entity_id: climate.thermostat_1
     - delay: "00:15:00"
     - action: climate.set_temperature
       data:
         temperature: 19
       target:
-        entity_id: climate.st1820_b08184f2dbc8
+        entity_id: climate.thermostat_2
     - delay: "00:15:00"
     - action: climate.set_temperature
       data:
         temperature: 19
       target:
-        entity_id: climate.st1820_b08184f48e64
+        entity_id: climate.thermostat_3
     - delay: "00:15:00"
     - action: climate.set_temperature
       data:
         temperature: 19
       target:
-        entity_id: climate.st1820_b08184f67248
+        entity_id: climate.thermostat_4
     - delay: "00:15:00"
     - action: climate.set_temperature
       data:
@@ -1491,13 +1491,13 @@ automation:
       data:
         temperature: 19
       target:
-        entity_id: climate.st1820_b08184f4860c
+        entity_id: climate.thermostat_5
     - delay: "00:15:00"
     - action: climate.set_temperature
       data:
         temperature: 19
       target:
-        entity_id: climate.st1820_b08184f5c164
+        entity_id: climate.thermostat_6
     mode: single
 
   - id: wp_nachtabsenkung_ende

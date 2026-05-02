@@ -4,8 +4,7 @@
 # PLUS: DYNAMISCHES ENERGIEMANAGEMENT & URLAUBSMODUS V3
 #
 # --- VERSIONS-HISTORIE ---
-# 🟢 AKTUELL: 26.04.2026 - 18:00 Uhr (V4.5.3 - 25C Zwangsschlaf Fix gegen Sniffing-Kurzstarts)
-# 🔴 ERSETZT: 25.04.2026 - 12:55 Uhr (V4.5.2 - God-Mode Forensik für FTC6 Autonome Checks)
+# 🟢 AKTUELL: 30.04.2026 - V6.3 (Armor Piercing - The Final Watchdog)
 # ==============================================================================
 # 
 # 🚨 DIE 4 GOLDENEN REGELN (NIEMALS BRECHEN!) 🚨
@@ -35,17 +34,15 @@
 #    Wenn eine Antwort "Kurzzyklus" oder "kalte Dusche" ist = NICHT SPEICHERN!
 # ==============================================================================
 
-input_boolean:
-  wp_boost_aktiv:
-    name: "WP Boost Flag"
-    icon: mdi:fire
-    
-  wp_boost_freigabe:
-    name: "PV-Boost Automatik"
-    icon: mdi:solar-power
-    initial: true
-
 input_number:
+  zappi_letzte_ladung_kwh:
+    name: "Zappi Letzte Ladung"
+    min: 0
+    max: 200
+    step: 0.1
+    unit_of_measurement: "kWh"
+    icon: mdi:history
+
   dummy_strompreis:
     name: "Test: Strompreis"
     min: 0
@@ -64,6 +61,32 @@ input_number:
     unit_of_measurement: "kWh"
     icon: mdi:solar-power
 
+input_boolean:
+  mpc_foxess_tuersteher:
+    name: "FoxESS Diebstahlschutz"
+    icon: mdi:shield-car
+
+  wp_boost_aktiv:
+    name: "WP Boost Flag"
+    icon: mdi:fire
+    
+  wp_boost_freigabe:
+    name: "PV-Boost Automatik"
+    icon: mdi:solar-power
+
+  wp_dynamischer_tarif_aktiv:
+    name: "Tibber Tarif aktiv"
+    icon: mdi:lightning-bolt
+
+  wp_preis_boost_aktiv:
+    name: "WP Preis-Boost Flag"
+    icon: mdi:piggy-bank
+    
+  wp_preis_boost_freigabe:
+    name: "Preis-Boost Automatik"
+    icon: mdi:cash-clock
+
+
 input_datetime:
   wp_urlaub_rueckkehr:
     name: "Rückkehrdatum WP"
@@ -80,13 +103,13 @@ input_select:
     initial: de
     
   wp_urlaubsmodus:
-    name: "Urlaubsmodus"
-    icon: mdi:airplane
+    name: "WP Betriebsmodus"
+    icon: mdi:heat-pump
     options:
       - "Normalbetrieb"
+      - "Sommerbetrieb (Nur Warmwasser)"
       - "Sommer-Urlaub (WP AUS)"
       - "Winter-Urlaub (Minimal 45°C)"
-    initial: "Normalbetrieb"
 
 counter:
   wp_starts_heute:
@@ -425,7 +448,7 @@ template:
 
       - name: "Mitsubishi WP: Betriebsart"
         unique_id: mitsubishi_wp_betriebsart
-        state: >-
+        state: >
           {% set lang = states('input_select.mitsubishi_wp_translations_language') %}
           {% set trans = state_attr('sensor.mitsubishi_wp_translations', 'operating_mode_' ~ lang) %}
           {% set v = states('sensor.mitsubishi_wp_betriebsart_raw') %}
@@ -435,7 +458,7 @@ template:
 
       - name: "Mitsubishi WP: Betriebsart (Warmwasser)"
         unique_id: mitsubishi_wp_betriebsart_warmwasser
-        state: >-
+        state: >
           {% set lang = states('input_select.mitsubishi_wp_translations_language') %}
           {% set trans = state_attr('sensor.mitsubishi_wp_translations', 'dhw_mode_' ~ lang) %}
           {% set v = states('sensor.mitsubishi_wp_betriebsart_warmwasser_raw') %}
@@ -445,7 +468,7 @@ template:
 
       - name: "Mitsubishi WP: A/C Modus Heizkreis 1"
         unique_id: mitsubishi_wp_a_c_modus_heizkreis_1
-        state: >-
+        state: >
           {% set lang = states('input_select.mitsubishi_wp_translations_language') %}
           {% set trans = state_attr('sensor.mitsubishi_wp_translations', 'ac_mode_' ~ lang) %}
           {% set v = states('sensor.mitsubishi_wp_a_c_modus_heizkreis_1_raw') %}
@@ -455,7 +478,7 @@ template:
 
       - name: "Mitsubishi WP: Umschaltung Heizen/Kühlen"
         unique_id: mitsubishi_wp_umschaltung_heizen_kuhlen
-        state: >-
+        state: >
           {% set lang = states('input_select.mitsubishi_wp_translations_language') %}
           {% set trans = state_attr('sensor.mitsubishi_wp_translations', 'heating_cooling_mode_' ~ lang) %}
           {% set v = states('sensor.mitsubishi_wp_umschaltung_heizen_kuhlen_raw') %}
@@ -465,7 +488,7 @@ template:
 
       - name: "Mitsubishi WP: Abtaubetrieb"
         unique_id: mitsubishi_wp_abtaubetrieb
-        state: >-
+        state: >
           {% set lang = states('input_select.mitsubishi_wp_translations_language') %}
           {% set trans = state_attr('sensor.mitsubishi_wp_translations', 'defrost_' ~ lang) %}
           {% set v = states('sensor.mitsubishi_wp_abtaubetrieb_raw') %}
@@ -475,7 +498,7 @@ template:
 
       - name: "Mitsubishi WP: Status Heizquelle"
         unique_id: mitsubishi_wp_status_heizquelle
-        state: >-
+        state: >
           {% set lang = states('input_select.mitsubishi_wp_translations_language') %}
           {% set trans = state_attr('sensor.mitsubishi_wp_translations', 'heat_source_status_' ~ lang) %}
           {% set v = states('sensor.mitsubishi_wp_status_heizquelle_raw') %}
@@ -488,10 +511,10 @@ template:
         unit_of_measurement: "kWh"
         device_class: energy
         state_class: total
-        availability: >-
+        availability: >
           {{ states('sensor.mitsubishi_wp_zuletzt_gemessene_erzeugte_heizenergie_kwh_anteil') not in ['unknown', 'unavailable', 'none']
              and states('sensor.mitsubishi_wp_zuletzt_gemessene_erzeugte_heizenergie_wh_anteil') not in ['unknown', 'unavailable', 'none'] }}
-        state: >-
+        state: >
           {% set kwh = states('sensor.mitsubishi_wp_zuletzt_gemessene_erzeugte_heizenergie_kwh_anteil') | float(0) %}
           {% set wh = states('sensor.mitsubishi_wp_zuletzt_gemessene_erzeugte_heizenergie_wh_anteil') | float(0) %}
           {{ (kwh + (wh / 1000)) | round(2) }}
@@ -501,10 +524,10 @@ template:
         unit_of_measurement: "kWh"
         device_class: energy
         state_class: total
-        availability: >-
+        availability: >
           {{ states('sensor.mitsubishi_wp_zuletzt_gemessene_erzeugte_kuhlenergie_kwh_anteil') not in ['unknown', 'unavailable', 'none']
              and states('sensor.mitsubishi_wp_zuletzt_gemessene_erzeugte_kuhlenergie_wh_anteil') not in ['unknown', 'unavailable', 'none'] }}
-        state: >-
+        state: >
           {% set kwh = states('sensor.mitsubishi_wp_zuletzt_gemessene_erzeugte_kuhlenergie_kwh_anteil') | float(0) %}
           {% set wh = states('sensor.mitsubishi_wp_zuletzt_gemessene_erzeugte_kuhlenergie_wh_anteil') | float(0) %}
           {{ (kwh + (wh / 1000)) | round(2) }}
@@ -514,10 +537,10 @@ template:
         unit_of_measurement: "kWh"
         device_class: energy
         state_class: total
-        availability: >-
+        availability: >
           {{ states('sensor.mitsubishi_wp_zuletzt_gemessene_erzeugte_warmwasserenergie_kwh_anteil') not in ['unknown', 'unavailable', 'none']
              and states('sensor.mitsubishi_wp_zuletzt_gemessene_erzeugte_warmwasserenergie_wh_anteil') not in ['unknown', 'unavailable', 'none'] }}
-        state: >-
+        state: >
           {% set kwh = states('sensor.mitsubishi_wp_zuletzt_gemessene_erzeugte_warmwasserenergie_kwh_anteil') | float(0) %}
           {% set wh = states('sensor.mitsubishi_wp_zuletzt_gemessene_erzeugte_warmwasserenergie_wh_anteil') | float(0) %}
           {{ (kwh + (wh / 1000)) | round(2) }}
@@ -577,8 +600,8 @@ template:
         state_class: measurement
         state: >
           {{ (states('sensor.shelly_wp_phase_a_leistung') | float(0) * 3)
-           + (states('sensor.shelly_wp_phase_b_leistung') | float(0) * 3)
-           + (states('sensor.shelly_wp_phase_c_leistung') | float(0)) }}
+             + (states('sensor.shelly_wp_phase_b_leistung') | float(0) * 3)
+             + (states('sensor.shelly_wp_phase_c_leistung') | float(0)) }}
 
       - name: "WP Waermeleistung"
         unit_of_measurement: "W"
@@ -728,23 +751,17 @@ template:
       - name: "WP Puffer Soll Dynamisch"
         unique_id: wp_puffer_soll_dynamisch
         unit_of_measurement: "°C"
-        device_class: temperature
-        icon: mdi:thermometer-auto
         state: >
-          {% set puffer_ist = states('sensor.mitsubishi_wp_isttemperatur_wasserspeicher_tww') | float(45) %}
-          
-          {# Schritt 1: Absolutes Ziel-Soll berechnen #}
-          {% if puffer_ist < 38 %}
-            {% set ziel_max = 50 %}
-          {% elif is_state('input_boolean.wp_boost_aktiv', 'on') %}
-            {% set ziel_max = 55 %}
+          {% set urlaub = states('input_select.wp_urlaubsmodus') %}
+          {% if urlaub == 'Sommerbetrieb (Nur Warmwasser)' %}
+            58
+          {% elif is_state('input_boolean.wp_boost_aktiv', 'on') or is_state('input_boolean.wp_preis_boost_aktiv', 'on') %}
+            58
           {% elif is_state('binary_sensor.wp_ladewaechter', 'on') %}
-            {% set ziel_max = 50 %}
+            53
           {% else %}
-            {% set ziel_max = 25 %}
+            40
           {% endif %}
-
-          {{ ziel_max }}
 
       # =========================================================
       # ---> NEUE SENSOREN: URLAUBSMODUS
@@ -755,7 +772,9 @@ template:
           {% set modus = states('input_select.wp_urlaubsmodus') %}
           {% set rueckkehr = states('input_datetime.wp_urlaub_rueckkehr') %}
           {% if modus == 'Normalbetrieb' %}
-            ✅ Zuhause
+            ✅ Zuhause (Winter)
+          {% elif modus == 'Sommerbetrieb (Nur Warmwasser)' %}
+            ☀️ Zuhause (Sommer)
           {% else %}
             ✈️ {{ modus }} — Rückkehr: {{ rueckkehr.split(' ')[0] }}
           {% endif %}
@@ -778,19 +797,21 @@ template:
             
             {% set urlaub = states('input_select.wp_urlaubsmodus') %}
             {% if urlaub == 'Sommer-Urlaub (WP AUS)' %}
-              {% set target = 15 %}
+              {% set target = 40 %}
             {% elif urlaub == 'Winter-Urlaub (Minimal 45°C)' %}
               {% set target = 45 %}
-            {% elif states('input_boolean.wp_boost_aktiv') == 'on' %}
-              {% set target = 55 %}
+            {% elif urlaub == 'Sommerbetrieb (Nur Warmwasser)' %}
+              {% set target = 58 %}
+            {% elif states('input_boolean.wp_boost_aktiv') == 'on' or states('input_boolean.wp_preis_boost_aktiv') == 'on' %}
+              {% set target = 58 %}
             {% else %}
-              {% set target = 50 %}
+              {% set target = 53 %}
             {% endif %}
             
             {# V4.0 Spike-Filter: Ignoriere Modbus-Geisterwerte über 80°C oder unter 5°C #}
             {% if temp > 80 or temp < 5 %}
               {{ current_state }}
-            {% elif temp < 41 %}
+            {% elif temp < 42 %}
               true
             {% elif temp >= (target - 0.8) %}
               false
@@ -869,14 +890,19 @@ template:
         state: >
           {% set feed_in = states('sensor.feed_in') | float(0) %}
           {% set soc = states('sensor.battery_soc_1') | float(0) %}
+          {% set pv_power = states('sensor.pv_power') | float(0) %}
+          {% set current_hour = now().hour %}
           
-          {# Standard 60% Hürde #}
+          {# Standard 60% Hürde (Wenn Batterie schon voll ist) #}
           {% set standard = (feed_in > 1200 and soc >= 60) %}
           
-          {# Szenario A: MPC Forecast Bypass #}
-          {% set mpc_bypass = is_state('binary_sensor.mpc_pv_prognose_freigabe', 'on') and feed_in > 1200 %}
+          {# Szenario A: MPC Forecast Bypass (Ohne den fehlerhaften feed_in Zwang) #}
+          {% set mpc_bypass = is_state('binary_sensor.mpc_pv_prognose_freigabe', 'on') and pv_power > 2000 %}
+
+          {# Szenario B: Morgen-Bypass (Batterie frisst alles weg, aber PV knallt) #}
+          {% set morgen_bypass = (current_hour < 15 and soc >= 50 and pv_power > 2500) %}
           
-          {{ standard or mpc_bypass }}
+          {{ standard or mpc_bypass or morgen_bypass }}
         delay_on: "00:05:00"
         delay_off: "00:05:00"
 
@@ -952,10 +978,11 @@ automation:
 
   - id: wp_abtauzyklus_zaehlen
     alias: "WP Taktung - Abtauzyklus zählen & Filtern"
-    description: "Zählt Abtauvorgänge und filtert sie aus der Taktung heraus"
+    description: "Zählt Abtauvorgänge und filtert sie aus der Taktung heraus (mit 30s Glitch-Schutz)"
     triggers:
     - entity_id: sensor.mitsubishi_wp_abtaubetrieb_raw
       to: '2'
+      for: "00:00:30"
       platform: state
     actions:
     - target:
@@ -996,7 +1023,7 @@ automation:
       state: 'on'
     - condition: numeric_state
       entity_id: sensor.mitsubishi_wp_isttemperatur_wasserspeicher_tww
-      below: 53.0
+      below: 55.0
     actions:
     - target:
         entity_id: input_boolean.wp_boost_aktiv
@@ -1004,7 +1031,7 @@ automation:
     - action: notify.persistent_notification
       data:
         title: WP Boost angefordert ☀️
-        message: "PV-Boost (Huckepack) aktiviert! Watchdog delegiert 55°C."
+        message: "PV-Boost (Huckepack) aktiviert! Watchdog delegiert 57°C."
     mode: single
 
   - id: wp_boost_beenden
@@ -1027,7 +1054,7 @@ automation:
       platform: state
     # Hard-Fail-Safe (Falls 55 wirklich mechanisch gerissen werden / Software-Stopp)
     - entity_id: sensor.mitsubishi_wp_isttemperatur_wasserspeicher_tww
-      above: 54.0
+      above: 57.5
       for:
         minutes: 1
       platform: numeric_state
@@ -1043,6 +1070,109 @@ automation:
       data:
         title: WP Boost beendet 🌙
         message: "PV-Boost Flag entfernt. Watchdog bewertet Zustand neu."
+    mode: single
+
+  - id: wp_preis_boost_aktivieren
+    alias: "WP Preis-Boost bei Tibber-Tiefstpreis aktivieren"
+    description: "Setzt Preis-Boost Flag auf ON (Ladet Puffer auf 57°C)"
+    triggers:
+    - platform: state
+      entity_id: binary_sensor.mpc_preis_prognose_freigabe
+      to: 'on'
+    - platform: state
+      entity_id: input_boolean.wp_preis_boost_freigabe
+      to: 'on'
+    - platform: state
+      entity_id: input_boolean.wp_dynamischer_tarif_aktiv
+      to: 'on'
+    conditions:
+    - condition: not
+      conditions:
+        - condition: state
+          entity_id: input_select.wp_urlaubsmodus
+          state: 'Sommerbetrieb (Nur Warmwasser)'
+    - condition: state
+      entity_id: input_boolean.wp_dynamischer_tarif_aktiv
+      state: 'on'
+    - condition: state
+      entity_id: input_boolean.wp_preis_boost_freigabe
+      state: 'on'
+    - condition: state
+      entity_id: input_boolean.wp_preis_boost_aktiv
+      state: 'off'
+    - condition: state
+      entity_id: binary_sensor.mpc_preis_prognose_freigabe
+      state: 'on'
+    - condition: numeric_state
+      entity_id: sensor.mitsubishi_wp_isttemperatur_wasserspeicher_tww
+      below: 55.0
+    actions:
+    - target:
+        entity_id: input_boolean.wp_preis_boost_aktiv
+      action: input_boolean.turn_on
+    - action: notify.persistent_notification
+      data:
+        title: WP Preis-Boost angefordert 💰
+        message: "Tibber Billigstrom aktiv! Watchdog delegiert 57°C Puffer-Soll."
+    mode: single
+
+  - id: wp_preis_boost_beenden
+    alias: "WP Preis-Boost beenden (Soft-Stop)"
+    description: "Setzt Preis-Boost Flag auf OFF mit weichem Ausgleiten"
+    triggers:
+    - entity_id: input_boolean.wp_dynamischer_tarif_aktiv
+      to: 'off'
+      platform: state
+    - entity_id: input_boolean.wp_preis_boost_freigabe
+      to: 'off'
+      platform: state
+    - entity_id: binary_sensor.mpc_preis_prognose_freigabe
+      to: 'off'
+      platform: state
+    - entity_id: sensor.mitsubishi_wp_warmepumpe_frequenz
+      below: 5
+      platform: numeric_state
+    - entity_id: sensor.mitsubishi_wp_isttemperatur_wasserspeicher_tww
+      above: 56.8
+      for:
+        minutes: 1
+      platform: numeric_state
+    conditions:
+    - condition: state
+      entity_id: input_boolean.wp_preis_boost_aktiv
+      state: 'on'
+    - condition: or
+      conditions:
+        # Freigabe manuell entzogen
+        - condition: or
+          conditions:
+            - condition: state
+              entity_id: input_boolean.wp_preis_boost_freigabe
+              state: 'off'
+            - condition: state
+              entity_id: input_boolean.wp_dynamischer_tarif_aktiv
+              state: 'off'
+        # Ziel erreicht (Ausgleiten)
+        - condition: numeric_state
+          entity_id: sensor.mitsubishi_wp_isttemperatur_wasserspeicher_tww
+          above: 56.8
+        # Strom wieder teuer UND Kompressor hat ausgeglitten
+        - condition: and
+          conditions:
+            - condition: state
+              entity_id: binary_sensor.mpc_preis_prognose_freigabe
+              state: 'off'
+            - condition: numeric_state
+              entity_id: sensor.mitsubishi_wp_warmepumpe_frequenz
+              below: 5
+    actions:
+    - target:
+        entity_id: input_boolean.wp_preis_boost_aktiv
+      action: input_boolean.turn_off
+    - action: notify.persistent_notification
+      data:
+        title: WP Preis-Boost beendet 📉
+        message: "Tibber-Phase beendet oder Ziel erreicht. Flag entfernt."
     mode: single
 
   - id: zappi_smart_charge_solar
@@ -1064,7 +1194,7 @@ automation:
     - target:
         entity_id: select.zappi_charge_mode
       data:
-        option: ECO+
+        option: 'Eco+'
       action: select.select_option
     mode: single
 
@@ -1086,7 +1216,7 @@ automation:
     - target:
         entity_id: select.zappi_charge_mode
       data:
-        option: FAST
+        option: 'Fast'
       action: select.select_option
     mode: single
 
@@ -1116,7 +1246,7 @@ automation:
     - target:
         entity_id: select.zappi_charge_mode
       data:
-        option: 'ECO+'
+        option: 'Eco+'
       action: select.select_option
     - action: notify.persistent_notification
       data:
@@ -1158,17 +1288,18 @@ automation:
         ziel_soll: >
           {% set urlaub = states('input_select.wp_urlaubsmodus') %}
           {% if urlaub == 'Sommer-Urlaub (WP AUS)' %}
-            15
+            40
           {% elif urlaub == 'Winter-Urlaub (Minimal 45°C)' %}
             45
           {% else %}
             {{ states('sensor.wp_puffer_soll_dynamisch') | int(40) }}
           {% endif %}
-        aktuelles_echo: "{{ states('sensor.mitsubishi_wp_solltemperatur_wasserspeicher_tww') | float(0) }}"
+        aktuelles_echo_tww: "{{ states('sensor.mitsubishi_wp_solltemperatur_wasserspeicher_tww') | float(0) }}"
+        aktuelles_echo_hk: "{{ states('sensor.mitsubishi_wp_temperaturregler_solltemperatur_heizkreis_1') | float(0) }}"
     - choose:
       - conditions:
         - condition: template
-          value_template: "{{ (ziel_soll | float) != aktuelles_echo }}"
+          value_template: "{{ (ziel_soll | float) != aktuelles_echo_tww }}"
         sequence:
         - action: modbus.write_register
           data:
@@ -1176,28 +1307,161 @@ automation:
             unit: 1
             address: 30
             value: "{{ (ziel_soll | int) * 100 }}"
+    - choose:
+      - conditions:
+        - condition: template
+          value_template: "{{ (ziel_soll | float) != aktuelles_echo_hk }}"
+        sequence:
+        - action: modbus.write_register
+          data:
+            hub: mitsubishi-a1m
+            unit: 1
+            address: 55
+            value: "{{ (ziel_soll | int) * 100 }}"
       default:
         - action: homeassistant.update_entity
           target:
             entity_id: sensor.mitsubishi_wp_vorlauftemperatur
     - choose:
+      # ANPASSUNG HIER: Erlaube Normalbetrieb ODER Winter-Urlaub zum Starten
       - conditions:
         - condition: template
-          value_template: "{{ is_state('input_boolean.wp_boost_aktiv', 'on') or is_state('binary_sensor.wp_ladewaechter', 'on') }}"
+          value_template: "{{ states('input_select.wp_urlaubsmodus') in ['Normalbetrieb', 'Winter-Urlaub (Minimal 45°C)'] }}"
+        - condition: template
+          value_template: "{{ is_state('input_boolean.wp_boost_aktiv', 'on') or is_state('input_boolean.wp_preis_boost_aktiv', 'on') or is_state('binary_sensor.wp_ladewaechter', 'on') }}"
+        # HARDWARE-SCHUTZ-FILTER (Abtauen & 20-Minuten Cooldown)
+        - condition: template
+          value_template: "{{ states('sensor.mitsubishi_wp_abtaubetrieb_raw') not in ['2', '3', 'Abtauung', 'Defrost'] }}"
+        - condition: template
+          value_template: >
+            {{ is_state('binary_sensor.wp_laeuft', 'on') or 
+               (states.binary_sensor.wp_laeuft is not none and (now() - states.binary_sensor.wp_laeuft.last_changed).total_seconds() > 1200) }}
         sequence:
         - target:
             entity_id: switch.wp_thermostat_in_1
           action: switch.turn_on
+        - action: modbus.write_register
+          data:
+            hub: mitsubishi-a1m
+            unit: 1
+            address: 26
+            value: 2
+      # ANPASSUNG HIER: Erlaube Normalbetrieb ODER Winter-Urlaub zum Stoppen
       - conditions:
         - condition: template
-          value_template: "{{ is_state('input_boolean.wp_boost_aktiv', 'off') and is_state('binary_sensor.wp_ladewaechter', 'off') }}"
+          value_template: "{{ states('input_select.wp_urlaubsmodus') in ['Normalbetrieb', 'Winter-Urlaub (Minimal 45°C)'] }}"
+        - condition: template
+          value_template: "{{ is_state('input_boolean.wp_boost_aktiv', 'off') and is_state('input_boolean.wp_preis_boost_aktiv', 'off') and is_state('binary_sensor.wp_ladewaechter', 'off') }}"
+        - condition: template
+          value_template: "{{ states('sensor.mitsubishi_wp_abtaubetrieb_raw') not in ['2', '3', 'Abtauung', 'Defrost'] }}"
         - condition: template
           value_template: >
-            {{ (now() - states.binary_sensor.wp_ladewaechter.last_changed).total_seconds() > 300 }}
+            {{ states.binary_sensor.wp_ladewaechter is not none and (now() - states.binary_sensor.wp_ladewaechter.last_changed).total_seconds() > 300 }}
         sequence:
         - target:
             entity_id: switch.wp_thermostat_in_1
           action: switch.turn_off
+        - action: modbus.write_register
+          data:
+            hub: mitsubishi-a1m
+            unit: 1
+            address: 26
+            value: 2
+
+  - id: wp_urlaubsmodus_wechsel
+    alias: "WP - Urlaubsmodus Ändern"
+    trigger:
+      - platform: state
+        entity_id: input_select.wp_urlaubsmodus
+    action:
+      - choose:
+          # SOMMERBETRIEB
+          - conditions:
+              - condition: state
+                entity_id: input_select.wp_urlaubsmodus
+                state: "Sommerbetrieb (Nur Warmwasser)"
+            sequence:
+              - action: modbus.write_register
+                data:
+                  hub: mitsubishi-a1m
+                  unit: 1
+                  address: 26
+                  value: 1
+              - action: switch.turn_off
+                target:
+                  entity_id: switch.wp_thermostat_in_1
+              - action: climate.set_hvac_mode
+                target:
+                  entity_id:
+                    - climate.thermostat_1
+                    - climate.thermostat_2
+                    - climate.thermostat_5
+                    - climate.thermostat_3
+                    - climate.thermostat_6
+                    - climate.thermostat_4
+                    - climate.t_kuche_eg
+                    - climate.thermostat_buro
+                data:
+                  hvac_mode: 'off'
+              - action: notify.persistent_notification
+                data:
+                  title: "☀️ Sommerbetrieb aktiv"
+                  message: "Haus-Heizung deaktiviert. Shelly IN1 ist hart getrennt. Alle 8 Raumthermostate wurden auf AUS geschaltet. Anlage liefert ausschließlich Warmwasser (Modus 1)."
+
+          # SOMMER URLAUB (ALLES AUS)
+          - conditions:
+              - condition: state
+                entity_id: input_select.wp_urlaubsmodus
+                state: "Sommer-Urlaub (WP AUS)"
+            sequence:
+              - action: modbus.write_register
+                data:
+                  hub: mitsubishi-a1m
+                  unit: 1
+                  address: 26
+                  value: 0
+              - action: switch.turn_off
+                target:
+                  entity_id: switch.wp_thermostat_in_1
+              - action: climate.set_hvac_mode
+                target:
+                  entity_id:
+                    - climate.thermostat_1
+                    - climate.thermostat_2
+                    - climate.thermostat_5
+                    - climate.thermostat_3
+                    - climate.thermostat_6
+                    - climate.thermostat_4
+                    - climate.t_kuche_eg
+                    - climate.thermostat_buro
+                data:
+                  hvac_mode: 'off'
+              - action: notify.persistent_notification
+                data:
+                  title: "🏖️ Sommer-Urlaub aktiv"
+                  message: "Wärmepumpe ist komplett AUSGESSCHALTET (Achtung: Kein Frostschutz!). Alle 8 Raumthermostate wurden auf AUS geschaltet. Shelly IN1 ist aus."
+
+          # WINTER URLAUB
+          - conditions:
+              - condition: state
+                entity_id: input_select.wp_urlaubsmodus
+                state: "Winter-Urlaub (Minimal 45°C)"
+            sequence:
+              - action: notify.persistent_notification
+                data:
+                  title: "❄️ Winter-Urlaub aktiv"
+                  message: "WP läuft auf Minimum (45°C Puffer). Watchdog übernimmt die Steuerung."
+
+          # NORMALBETRIEB
+          - conditions:
+              - condition: state
+                entity_id: input_select.wp_urlaubsmodus
+                state: "Normalbetrieb"
+            sequence:
+              - action: notify.persistent_notification
+                data:
+                  title: "🏠 Normalbetrieb hergestellt"
+                  message: "Wärmepumpe heizt wieder normal. Watchdog ist wieder voll aktiv."
 
   - id: wp_takten_erkennung
     alias: "WP Takten Erkennung"
@@ -1258,6 +1522,13 @@ automation:
           Diagnose: {{ diagnose }}
           Shelly IN1 (Trigger): {{ trigger_shelly_in1 }}
           Start: {{ start_zeit | as_timestamp | timestamp_custom('%H:%M:%S') }}
+          
+          --- GOD-MODE TELEMETRIE ---
+          Betriebsart (Start): {{ start_betriebsart }}
+          Vorlauf (Start/Ende): {{ start_vorlauf }}°C / {{ ende_vorlauf }}°C
+          TWW Speicher (Start): {{ start_tww }}°C
+          Durchfluss (Ende): {{ ende_durchfluss }} L/min
+          Abtauung (Start/Ende): {{ start_defrost }} / {{ ende_defrost }}
     - action: counter.increment
       target:
         entity_id: counter.wp_kurzzyklen_heute
@@ -1318,90 +1589,6 @@ automation:
           Gefordertes Ziel: {{ states('sensor.wp_puffer_soll_dynamisch') }} °C (Dynamisch)
           Ist-Wert TWW: {{ states('sensor.mitsubishi_wp_isttemperatur_wasserspeicher_tww') }} °C
 
-  # =========================================================
-  # ---> NEUE AUTOMATIONEN: PREIS-INTELLIGENZ & URLAUB
-  # =========================================================
-  - id: wp_soll_dynamisch_anpassen_test
-    alias: "TEST: WP - Dynamische Soll-Temperatur"
-    description: "Signalisiert Soll-Anpassung, schreibt aber noch NICHT auf den Modbus"
-    trigger:
-      - platform: state
-        entity_id: sensor.wp_puffer_soll_dynamisch
-    condition:
-      - condition: state
-        entity_id: input_boolean.wp_boost_aktiv
-        state: 'off'
-      - condition: template
-        value_template: "{{ states('sensor.mitsubishi_wp_fehlercode_gateway_raw') not in ['unavailable', 'unknown'] }}"
-      - condition: template
-        value_template: "{{ states('sensor.mitsubishi_wp_isttemperatur_wasserspeicher_tww') not in ['unavailable', 'unknown'] }}"
-    action:
-      - action: notify.persistent_notification
-        data:
-          title: "🤖 Puffer-Soll angepasst"
-          message: >
-            🎯 Strategie: {{ states('sensor.wp_strategie') }}
-            💰 Preis: {{ states('sensor.aktueller_strompreis') }} ct/kWh
-            ☀️ Purer PV-Überschuss: {{ ((states('sensor.pv_power') | float(0) * 1000) - (states('sensor.load_power') | float(0) * 1000)) | round(0) }} W
-            🌡️ Puffer Ist: {{ states('sensor.mitsubishi_wp_isttemperatur_wasserspeicher_tww') }}°C
-            🎯 NEUES PUFFER ZIEL: {{ states('sensor.wp_puffer_soll_dynamisch') }}°C
-    mode: single
-
-  - id: wp_urlaubsmodus_wechsel
-    alias: "WP - Urlaubsmodus Ändern"
-    trigger:
-      - platform: state
-        entity_id: input_select.wp_urlaubsmodus
-    action:
-      - choose:
-          - conditions:
-              - condition: state
-                entity_id: input_select.wp_urlaubsmodus
-                state: "Sommer-Urlaub (WP AUS)"
-            sequence:
-              - action: modbus.write_register
-                data:
-                  hub: mitsubishi-a1m
-                  unit: 1
-                  address: 26
-                  value: 0
-              - action: notify.persistent_notification
-                data:
-                  title: "🏖️ Sommer-Urlaub aktiv"
-                  message: "Wärmepumpe ist komplett AUSGESSCHALTET (Achtung: Kein Frostschutz!)."
-
-          - conditions:
-              - condition: state
-                entity_id: input_select.wp_urlaubsmodus
-                state: "Winter-Urlaub (Minimal 45°C)"
-            sequence:
-              - action: modbus.write_register
-                data:
-                  hub: mitsubishi-a1m
-                  unit: 1
-                  address: 26
-                  value: 2
-              - action: notify.persistent_notification
-                data:
-                  title: "❄️ Winter-Urlaub aktiv"
-                  message: "WP läuft auf Minimum (45°C Puffer). Haus kühlt nicht völlig aus."
-
-          - conditions:
-              - condition: state
-                entity_id: input_select.wp_urlaubsmodus
-                state: "Normalbetrieb"
-            sequence:
-              - action: modbus.write_register
-                data:
-                  hub: mitsubishi-a1m
-                  unit: 1
-                  address: 26
-                  value: 2
-              - action: notify.persistent_notification
-                data:
-                  title: "🏠 Normalbetrieb hergestellt"
-                  message: "Wärmepumpe heizt wieder normal (50°C Soll)."
-
   - id: wp_urlaub_rueckkehr_automatik
     alias: "WP - Urlaub Rückkehrvorbereitung 24h"
     trigger:
@@ -1427,35 +1614,90 @@ automation:
           message: "Das Haus wird nun vorgeheizt. Der Urlaubsmodus wurde automatisch beendet."
 
   - id: zappi_default_eco_plus
-    alias: "Zappi - Sicherheit beim Anstecken (ECO +)"
-    description: "Verhindert versehentliches FAST-Entladen der Hausbatterie am Tag"
+    alias: "Zappi - Intelligente Weiche beim An-/Abstecken"
+    description: "Setzt Zappi auf ECO+ zurück, außer der Strom ist im exakten Moment des Ansteckens extrem günstig (Nachtstrom)"
     mode: single
     triggers:
-    - trigger: state
+    - platform: state
       entity_id: sensor.zappi_plug_status
       to: 'Connected'
-    conditions:
-    - condition: time
-      after: '06:00:00'
-      before: '20:00:00'
+    - platform: state
+      entity_id: sensor.zappi_plug_status
+      to: 'Waiting for EV'
+    - platform: state
+      entity_id: sensor.zappi_plug_status
+      to: 'EV Disconnected'
+    - platform: state
+      entity_id: sensor.zappi_plug_status
+      to: 'Not Connected'
+    conditions: []
     actions:
-    - action: select.select_option
+    - choose:
+      - conditions:
+        - condition: template
+          value_template: "{{ states('sensor.zappi_plug_status') in ['Connected', 'Waiting for EV'] }}"
+        - condition: or
+          conditions:
+          - condition: numeric_state
+            entity_id: sensor.aktueller_strompreis
+            below: 20
+          - condition: state
+            entity_id: sensor.wp_strategie
+            state: 'BILLIGSTE_STUNDE_JETZT'
+        sequence:
+        - action: select.select_option
+          target:
+            entity_id: select.zappi_charge_mode
+          data:
+            option: 'Fast'
+      default:
+      - action: select.select_option
+        target:
+          entity_id: select.zappi_charge_mode
+        data:
+          option: 'Eco+'
+
+  - id: zappi_save_last_charge
+    alias: "Zappi - Letzte Ladung speichern (Speicherkarte)"
+    description: "Sichert die kWh der letzten Ladesession in einen Helfer, bevor die Zappi ihn nullt"
+    mode: single
+    triggers:
+    - platform: state
+      entity_id: sensor.zappi_plug_status
+      to: 'EV Disconnected'
+    - platform: state
+      entity_id: sensor.zappi_plug_status
+      to: 'Not Connected'
+    conditions:
+    - condition: numeric_state
+      entity_id: sensor.zappi_charge_added_session
+      above: 0.1
+    actions:
+    - action: input_number.set_value
       target:
-        entity_id: select.zappi_charge_mode
+        entity_id: input_number.zappi_letzte_ladung_kwh
       data:
-        option: 'ECO +'
+        value: "{{ states('sensor.zappi_charge_added_session') | float(0) }}"
 
   - id: mpc_foxess_diebstahlschutz
     alias: "MPC - FoxESS Diebstahlschutz (Der Türsteher)"
     description: "Szenario D: Friert Hausbatterie sofort ein, wenn Großverbraucher PV konsumieren"
     mode: restart
     triggers:
-    - trigger: state
+    - platform: state
       entity_id: sensor.zappi_plug_status
-    - trigger: state
+      to: 'Charging'
+    - platform: state
+      entity_id: sensor.zappi_plug_status
+      from: 'Charging'
+    - platform: state
       entity_id: select.zappi_charge_mode
-    - trigger: state
+    - platform: state
       entity_id: input_boolean.wp_boost_aktiv
+    conditions:
+    - condition: state
+      entity_id: input_boolean.mpc_foxess_tuersteher
+      state: 'on'
     actions:
     - if:
       - condition: or
@@ -1466,17 +1708,27 @@ automation:
                 entity_id: sensor.zappi_plug_status
                 state: 'Charging'
               - condition: template
-                value_template: "{{ states('select.zappi_charge_mode') in ['FAST', 'ECO+'] }}"
+                value_template: "{{ states('select.zappi_charge_mode') | upper | replace(' ', '') in ['FAST', 'ECO', 'ECO+'] }}"
           - condition: state
             entity_id: input_boolean.wp_boost_aktiv
             state: 'on'
       then:
+      - condition: not
+        conditions:
+          - condition: state
+            entity_id: select.work_mode
+            state: 'Back-up'
       - action: select.select_option
         target:
           entity_id: select.work_mode
         data:
           option: 'Back-up'
       else:
+      - condition: not
+        conditions:
+          - condition: state
+            entity_id: select.work_mode
+            state: 'Self Use'
       - action: select.select_option
         target:
           entity_id: select.work_mode
@@ -1487,7 +1739,7 @@ automation:
     alias: "MPC - WP Stromzähler Tarif Umschalter"
     description: "Trennt WP-Strom sauber in Pflicht und Luxus (PV-Boost)"
     triggers:
-    - trigger: state
+    - platform: state
       entity_id: input_boolean.wp_boost_aktiv
     actions:
     - action: select.select_option
@@ -1502,6 +1754,7 @@ automation:
           {% endif %}
     mode: single
 
+
   # ==========================================
   # WP NACHTABSENKUNG (SZENE-SNAPSHOT)
   # ==========================================
@@ -1511,47 +1764,6 @@ automation:
     - at: '21:00:00'
       platform: time
     actions:
-    - action: scene.create
-      data:
-        scene_id: wp_nab_st1
-        snapshot_entities:
-          - climate.thermostat_1
-    - action: scene.create
-      data:
-        scene_id: wp_nab_st2
-        snapshot_entities:
-          - climate.thermostat_2
-    - action: scene.create
-      data:
-        scene_id: wp_nab_st3
-        snapshot_entities:
-          - climate.thermostat_3
-    - action: scene.create
-      data:
-        scene_id: wp_nab_st4
-        snapshot_entities:
-          - climate.thermostat_4
-    - action: scene.create
-      data:
-        scene_id: wp_nab_st5
-        snapshot_entities:
-          - climate.t_kuche_eg
-    - action: scene.create
-      data:
-        scene_id: wp_nab_st6
-        snapshot_entities:
-          - climate.thermostat_buro
-    - action: scene.create
-      data:
-        scene_id: wp_nab_st7
-        snapshot_entities:
-          - climate.thermostat_5
-    - action: scene.create
-      data:
-        scene_id: wp_nab_st8
-        snapshot_entities:
-          - climate.thermostat_6
-    - delay: "00:00:05"
     - action: climate.set_temperature
       data:
         temperature: 19
@@ -1607,35 +1819,150 @@ automation:
     - at: '04:00:00'
       platform: time
     actions:
-    - action: scene.turn_on
+    - action: climate.set_temperature
+      data:
+        temperature: 22
       target:
-        entity_id: scene.wp_nab_st1
+        entity_id: climate.thermostat_1
     - delay: "00:15:00"
-    - action: scene.turn_on
+    - action: climate.set_temperature
+      data:
+        temperature: 22
       target:
-        entity_id: scene.wp_nab_st2
+        entity_id: climate.thermostat_2
     - delay: "00:15:00"
-    - action: scene.turn_on
+    - action: climate.set_temperature
+      data:
+        temperature: 22
       target:
-        entity_id: scene.wp_nab_st3
+        entity_id: climate.thermostat_3
     - delay: "00:15:00"
-    - action: scene.turn_on
+    - action: climate.set_temperature
+      data:
+        temperature: 22
       target:
-        entity_id: scene.wp_nab_st4
+        entity_id: climate.thermostat_4
     - delay: "00:15:00"
-    - action: scene.turn_on
+    - action: climate.set_temperature
+      data:
+        temperature: 22
       target:
-        entity_id: scene.wp_nab_st5
+        entity_id: climate.t_kuche_eg
     - delay: "00:15:00"
-    - action: scene.turn_on
+    - action: climate.set_temperature
+      data:
+        temperature: 22
       target:
-        entity_id: scene.wp_nab_st6
+        entity_id: climate.thermostat_buro
     - delay: "00:15:00"
-    - action: scene.turn_on
+    - action: climate.set_temperature
+      data:
+        temperature: 22
       target:
-        entity_id: scene.wp_nab_st7
+        entity_id: climate.thermostat_5
     - delay: "00:15:00"
-    - action: scene.turn_on
+    - action: climate.set_temperature
+      data:
+        temperature: 22
       target:
-        entity_id: scene.wp_nab_st8
+        entity_id: climate.thermostat_6
+    mode: single
+
+  # ==========================================
+  # JAHRESZEITEN-UMSCHALTUNG (THERMOSTATE)
+  # ==========================================
+  - id: wp_urlaub_thermostate_sommer
+    alias: "WP Jahreszeiten - Thermostate AUS (Sommer)"
+    description: "Schließt alle Ventile im Sommerbetrieb."
+    triggers:
+    - platform: state
+      entity_id: input_select.wp_urlaubsmodus
+      to: 'Sommerbetrieb (Nur Warmwasser)'
+    actions:
+    - action: climate.set_hvac_mode
+      data:
+        hvac_mode: 'off'
+      target:
+        entity_id: 
+          - climate.thermostat_1
+          - climate.thermostat_2
+          - climate.thermostat_3
+          - climate.thermostat_4
+          - climate.t_kuche_eg
+          - climate.thermostat_buro
+          - climate.thermostat_5
+          - climate.thermostat_6
+    mode: single
+
+  - id: wp_urlaub_thermostate_winter
+    alias: "WP Jahreszeiten - Thermostate AN (Winter)"
+    description: "Weckt alle Thermostate auf (verzögert, um Hydraulik-Schock zu meiden)."
+    triggers:
+    - platform: state
+      entity_id: input_select.wp_urlaubsmodus
+      to: 'Normalbetrieb'
+    actions:
+    - action: climate.set_hvac_mode
+      data: { hvac_mode: 'heat' }
+      target: { entity_id: climate.thermostat_1 }
+    - action: climate.set_temperature
+      data: { temperature: 22 }
+      target: { entity_id: climate.thermostat_1 }
+    - delay: "00:05:00"
+    
+    - action: climate.set_hvac_mode
+      data: { hvac_mode: 'heat' }
+      target: { entity_id: climate.thermostat_2 }
+    - action: climate.set_temperature
+      data: { temperature: 22 }
+      target: { entity_id: climate.thermostat_2 }
+    - delay: "00:05:00"
+    
+    - action: climate.set_hvac_mode
+      data: { hvac_mode: 'heat' }
+      target: { entity_id: climate.thermostat_3 }
+    - action: climate.set_temperature
+      data: { temperature: 22 }
+      target: { entity_id: climate.thermostat_3 }
+    - delay: "00:05:00"
+    
+    - action: climate.set_hvac_mode
+      data: { hvac_mode: 'heat' }
+      target: { entity_id: climate.thermostat_4 }
+    - action: climate.set_temperature
+      data: { temperature: 22 }
+      target: { entity_id: climate.thermostat_4 }
+    - delay: "00:05:00"
+    
+    - action: climate.set_hvac_mode
+      data: { hvac_mode: 'heat' }
+      target: { entity_id: climate.t_kuche_eg }
+    - action: climate.set_temperature
+      data: { temperature: 22 }
+      target: { entity_id: climate.t_kuche_eg }
+    - delay: "00:05:00"
+    
+    - action: climate.set_hvac_mode
+      data: { hvac_mode: 'heat' }
+      target: { entity_id: climate.thermostat_buro }
+    - action: climate.set_temperature
+      data: { temperature: 22 }
+      target: { entity_id: climate.thermostat_buro }
+    - delay: "00:05:00"
+    
+    - action: climate.set_hvac_mode
+      data: { hvac_mode: 'heat' }
+      target: { entity_id: climate.thermostat_5 }
+    - action: climate.set_temperature
+      data: { temperature: 22 }
+      target: { entity_id: climate.thermostat_5 }
+    - delay: "00:05:00"
+    
+    - action: climate.set_hvac_mode
+      data: { hvac_mode: 'heat' }
+      target: { entity_id: climate.thermostat_6 }
+    - action: climate.set_temperature
+      data: { temperature: 22 }
+      target: { entity_id: climate.thermostat_6 }
+      
     mode: single

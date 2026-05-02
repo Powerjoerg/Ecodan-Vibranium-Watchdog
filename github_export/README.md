@@ -34,8 +34,8 @@ Automatische PV-Überschuss-Steuerung für Mitsubishi Ecodan Wärmepumpen mit Ho
 ┌─────────────────┐     ┌──────────────────┐     ┌─────────────────┐
 │   PV-Anlage     │────▶│ FoxESS H3-Pro    │────▶│   Batterie      │
 │   14,5 kWp      │     │ Wechselrichter   │     │ FoxESS ESC 2900 │
-└─────────────────┘     └──────┬───────────┘     │ 17,28 kWh       │
-                               │                  └─────────────────┘
+└─────────────────┘     │ + Elfin-ew11a    │     │ 17,28 kWh       │
+                        └──────┬───────────┘     └─────────────────┘
                                │ PV-Daten via HA
                                ▼
 ┌─────────────────┐     ┌──────────────────┐     ┌─────────────────┐
@@ -69,6 +69,7 @@ Automatische PV-Überschuss-Steuerung für Mitsubishi Ecodan Wärmepumpen mit Ho
 | **WP-Verbrauchsmessung** | Shelly Pro 3EM (SPEM-003CEBEU) | 3× CT-Klemmen im Sicherungskasten |
 | **Thermostat-Steuerung** | Shelly 1 Mini Gen3 | Potentialfreier Kontakt an IN1 (Zone 1) zur Heizungssteuerung |
 | **Wechselrichter** | FoxESS H3-Pro-15.0 | Hybrid-Wechselrichter |
+| **PV-Gateway** | Elfin-ew11a | Modbus/TCP Gateway am FoxESS Wechselrichter |
 | **Batterie** | FoxESS ESC 2900-2 | 17,28 kWh Speicherkapazität |
 | **PV-Anlage** | — | 14,5 kWp |
 | **Home Assistant** | Raspberry Pi 5 | rpi5-64, HA OS |
@@ -269,6 +270,8 @@ Kopiere den Inhalt von `automations.yaml` aus diesem Repo in deine HA-Datei `con
 | 5 | **WP Boost beenden** | Zurück auf 50°C wenn PV < 0.8 kW, Batterie < 65% oder 21:00 Uhr |
 | 5 | **WP Boost Ziel erreicht** | Zurück auf 50°C wenn Speicher 59°C erreicht |
 | 6 | WP Soll manuell setzen | Schreibt Soll-Temperatur wenn Slider im Dashboard geändert wird |
+| 7 | **Jahreszeiten-Umschaltung (Sommer)** | Schaltet alle Heizkörper-Thermostate automatisch auf AUS |
+| 8 | **Jahreszeiten-Umschaltung (Winter)** | Weckt Thermostate im Winter auf (22°C) mit 5-Minuten Hydraulik-Schutz |
 
 ---
 
@@ -547,4 +550,5 @@ Aussagekräftiger als der Momentanwert, da er Anlauf- und Abtauphasen mittelt.
 
 ## Lizenz
 
-Dieses Projekt steht unter der [MIT-Lizenz](LICENSE).
+Dieses Projekt steht unter der **Creative Commons Attribution-NonCommercial 4.0 International (CC BY-NC 4.0)** Lizenz. 
+Eine kommerzielle Nutzung oder der Verkauf dieses Codes (z.B. durch Installateure) ist ohne ausdrückliche Genehmigung des Urhebers untersagt. Details siehe [LICENSE](LICENSE).

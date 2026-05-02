@@ -270,6 +270,8 @@ Kopiere den Inhalt von `automations.yaml` aus diesem Repo in deine HA-Datei `con
 | 5 | **WP Boost beenden** | Zurück auf 50°C wenn PV < 0.8 kW, Batterie < 65% oder 21:00 Uhr |
 | 5 | **WP Boost Ziel erreicht** | Zurück auf 50°C wenn Speicher 59°C erreicht |
 | 6 | WP Soll manuell setzen | Schreibt Soll-Temperatur wenn Slider im Dashboard geändert wird |
+| 7 | **Jahreszeiten-Umschaltung (Sommer)** | Schaltet alle Heizkörper-Thermostate automatisch auf AUS |
+| 8 | **Jahreszeiten-Umschaltung (Winter)** | Weckt Thermostate im Winter auf (22°C) mit 5-Minuten Hydraulik-Schutz |
 
 ---
 
